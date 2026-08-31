@@ -256,7 +256,20 @@ idp.__version__             # '0.1.0'
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Dual-licensed, deliberately:
+
+- **AGPL-3.0-or-later** (`LICENSE-AGPL`) — for open-source use. Anyone can use,
+  modify, and run py-idp. Modifications must be published under AGPL when run
+  as a network-accessible service. This is the copyleft that prevents
+  competitors from wrapping your work in a SaaS without contributing back.
+- **Commercial License** (`LICENSE-COMMERCIAL`) — for organisations that need
+  to embed py-idp in proprietary products / hosted SaaS without the AGPL
+  copyleft. Indicative pricing: $300/yr Solo, $1,500/yr Team, contact for
+  Enterprise / SaaS-OEM. Email rollroyces for a signed agreement.
+
+This mirrors the MariaDB / Sentry / MinIO model: pay for the convenience of
+running in a closed product; get the full source for free if you keep changes
+open.
 
 ## Citation
 

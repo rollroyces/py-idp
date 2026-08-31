@@ -1,3 +1,15 @@
+# py-idp: general-purpose, AI-enabled Intelligent Document Processing.
+# Copyright (c) 2026 Royce.
+#
+# Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+# with the following addition: a commercial license is also available for organizations
+# that wish to embed py-idp in proprietary products / hosted SaaS without the AGPL
+# copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
+# contact <royce-license-placeholder@protonmail.com> for terms.
+#
+# This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """LLM backend abstraction.
 
 All stages call `Backend.complete()` and get back a string. Backends
@@ -43,7 +55,12 @@ class Backend(abc.ABC):
 
     # Convenience helpers ------------------------------------------------
     def json_complete(self, messages: list[Message], **kw: Any) -> dict[str, Any]:
-        """Complete + parse JSON. Raises if model returns malformed JSON."""
+        """Complete + parse JSON. Never raises.
+
+        On parse failure returns `{"_error": ..., "_raw": ...}` so the
+        caller can decide whether the empty dict is acceptable or whether
+        it should route to an error path.
+        """
         req = CompletionRequest(messages=messages, json_mode=True, **kw)
         out = self.complete(req)
         return _safe_json(out)
@@ -311,22 +328,56 @@ import json
 
 
 def _safe_json(text: str) -> dict[str, Any]:
-    """Parse JSON from a model response, tolerating ```json fences."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
+    """Parse JSON from a model response, tolerating ```json fences.
+
+    Returns an `_error` dict on any parse failure rather than raising,
+    so callers can decide whether to swallow or surface the failure.
+    Accepts `null` and empty string by returning `{}`.
+    """
+    s = (text or "").strip()
+    if not s or s == "null":
+        return {}
+    s = re.sub(r"^```(?:json)?\s*", "", s)
+    s = re.sub(r"\s*```$", "", s)
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Model returned invalid JSON: {e}\n--- raw ---\n{text}") from e
+        v = json.loads(s)
+        return v if isinstance(v, dict) else {"_value": v}
+    except Exception:  # noqa: BLE001
+        # last resort: grab the first {...} block
+        m = re.search(r"\{.*\}", s, re.S)
+        if m:
+            try:
+                v = json.loads(m.group(0))
+                return v if isinstance(v, dict) else {"_value": v}
+            except Exception:  # noqa: BLE001
+                pass
+        return {"_error": "could not parse JSON", "_raw": text}
 
 
 def _extract_schema_block(prompt: str) -> str:
-    """Pull the JSON-schema section out of an extraction prompt."""
+    """Pull the JSON-schema section out of an extraction prompt.
+
+    Handles the two known formats:
+        "Output JSON Schema:\n{...}\n\nOutput rules:..."
+        "JSON Schema:\n{...}\n\nOutput:..."
+
+    If neither marker is found, returns "{}" so the mock falls back
+    to an empty object rather than crashing.
+    """
     if "Output JSON Schema:" in prompt:
-        return prompt.split("Output JSON Schema:", 1)[1].split("Output rules:", 1)[0].strip()
+        body = prompt.split("Output JSON Schema:", 1)[1]
+        # The schema block ends at "Output rules:" (preferred) or at the
+        # end of the prompt. Defensive against either order.
+        for end_marker in ("Output rules:", "Output rules", "Document content:"):
+            if end_marker in body:
+                return body.split(end_marker, 1)[0].strip()
+        return body.strip()
     if "JSON Schema:" in prompt:
-        return prompt.split("JSON Schema:", 1)[1].split("Output:", 1)[0].strip()
+        body = prompt.split("JSON Schema:", 1)[1]
+        for end_marker in ("Output:", "Document content:"):
+            if end_marker in body:
+                return body.split(end_marker, 1)[0].strip()
+        return body.strip()
     return "{}"
 
 

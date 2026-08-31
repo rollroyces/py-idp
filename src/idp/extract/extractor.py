@@ -1,3 +1,15 @@
+# py-idp: general-purpose, AI-enabled Intelligent Document Processing.
+# Copyright (c) 2026 Royce.
+#
+# Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+# with the following addition: a commercial license is also available for organizations
+# that wish to embed py-idp in proprietary products / hosted SaaS without the AGPL
+# copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
+# contact <royce-license-placeholder@protonmail.com> for terms.
+#
+# This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Extract stage.
 
 This is the core of the framework. Two call paths:
@@ -80,22 +92,37 @@ Document content:
 
 
 def _safe_load(raw: str) -> dict[str, Any]:
-    """Parse JSON robustly, tolerating ```json fences and trailing prose."""
-    raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    # try direct
+    """Parse a model's JSON response into a dict.
+
+    Differences from `_safe_json` (the llm helper):
+      - only used by the extract stage, where `dict[str, Any]` is the
+        schema target, and we WANT to fail loudly when the model emits
+        non-JSON or text before/after JSON.
+      - Returns `{"_error": ..., "_raw": ...}` on any parse failure so
+        the caller's `schema.model_validate` raises — which then surfaces
+        in `doc.errors` instead of being silently treated as a valid
+        empty extraction.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return {"_error": "empty model output", "_raw": raw}
+    s = re.sub(r"^```(?:json)?\s*", "", s)
+    s = re.sub(r"\s*```$", "", s)
     try:
-        return json.loads(raw)
+        v = json.loads(s)
+        return v if isinstance(v, dict) else {"_value": v}
     except Exception:  # noqa: BLE001
-        # grab the first {...} block
-        m = re.search(r"\{.*\}", raw, re.S)
+        # Only try the brace-fallback when the model wrapped the JSON in
+        # markdown. Otherwise we'd silently eat garbage and Pydantic would
+        # see `{"_raw": ...}` as a valid extraction.
+        m = re.search(r"^```(?:json)?\s*(\{.*\})\s*```", raw or "", re.S)
         if m:
             try:
-                return json.loads(m.group(0))
+                v = json.loads(m.group(1))
+                return v if isinstance(v, dict) else {"_value": v}
             except Exception:  # noqa: BLE001
                 pass
-        return {"_raw": raw, "_error": "could not parse JSON"}
+        return {"_error": "could not parse JSON", "_raw": raw}
 
 
 # ---------------------------------------------------------------------------
@@ -104,26 +131,38 @@ def _safe_load(raw: str) -> dict[str, Any]:
 def render_first_n_pages_to_images(doc: Document, n: int = 3) -> list[str]:
     """Best-effort render of the first n pages to base64 PNGs.
 
-    Falls back to empty list if no renderer is available (PDFs without
-    poppler/pdf2image installed). Multimodal calls then degrade gracefully
-    to text-only via the LLM backend.
+    Returns an empty list when:
+      - the doc is not a PDF
+      - pdf2image / poppler isn't available
+      - rendering fails for any reason
+
+    Failures log a warning (visible at INFO+); they are NOT silently
+    swallowed because the user might be expecting a multimodal call and
+    need to know the multimodal path degraded to text-only.
     """
+    if doc.extension != "pdf":
+        return []
+    if n <= 0:
+        return []
+    try:
+        from pdf2image import convert_from_path  # type: ignore
+    except ImportError as e:
+        log.warning(
+            "could not render PDF pages to images (install pdf2image + poppler "
+            "to use multimodal extraction): %s",
+            e,
+        )
+        return []
     out: list[str] = []
     try:
-        import pdf2image  # type: ignore
-        from pdf2image import convert_from_path  # type: ignore
-
-        if doc.extension != "pdf":
-            return []
         pages = convert_from_path(doc.source_path, dpi=150, first_page=1, last_page=n)
+        from io import BytesIO
         for img in pages:
-            from io import BytesIO
-
             buf = BytesIO()
             img.save(buf, format="PNG")
             out.append(base64.b64encode(buf.getvalue()).decode())
     except Exception as e:  # noqa: BLE001
-        log.debug("could not render pages to images: %s", e)
+        log.warning("pdf rendering failed for %s: %s", doc.source_path, e)
     return out
 
 
@@ -150,21 +189,42 @@ def extract(
 
     messages = _build_messages(schema, text, images_b64, extra_instructions=extra_instructions)
     req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
+    raw = ""
     try:
         raw = backend.complete(req)
-        extracted = _safe_load(raw)
     except Exception as e:  # noqa: BLE001
         doc.errors.append(f"extract_failed: {e}")
-        extracted = {"_error": str(e)}
+        raw = ""
 
-    # coerce through the user's schema; keep raw as a fallback
+    # Coerce through the user's schema; keep raw as a fallback. If the
+    # backend returned garbage instead of JSON, surface that — DON'T let
+    # `_safe_load`'s `{"_error": ..., "_raw": ...}` shape be silently
+    # coerced into a "valid" empty extraction by the user's `Optional`
+    # fields. That was a data-loss bug in v0.1.
+    extracted = _safe_load(raw)
+    raw_had_error = "_error" in extracted
+
     validated: dict[str, Any] = {}
     try:
-        validated = schema.model_validate(extracted).model_dump(mode="json")
+        validated_obj = schema.model_validate(extracted)
+        validated = validated_obj.model_dump(mode="json")
     except Exception as e:  # noqa: BLE001
         log.debug("schema validation at extract time failed: %s", e)
         validated = extracted if isinstance(extracted, dict) else {"_raw": str(extracted)}
         doc.errors.append(f"extract_schema_unvalidated: {e}")
+
+    # Loud failure surfacing: if the backend produced non-JSON AND Pydantic
+    # didn't raise, the result might still be a dict-shaped "looks valid"
+    # extraction. Mark it explicitly so the caller can short-circuit to
+    # HITL or retry.
+    if raw_had_error:
+        doc.errors.append(
+            f"extract_json_parse_failed: {extracted.get('_error')!r}; "
+            "extraction is fall-back nulls, do not trust without review"
+        )
+        # collapse the extraction to an explicit marker so HITL sees red
+        if isinstance(validated, dict) and validated and all(v is None for v in validated.values()):
+            validated = {"_parse_failed": True, "_raw": extracted.get("_raw")}
 
     doc.extraction = validated
     doc.extraction_schema = schema.__name__

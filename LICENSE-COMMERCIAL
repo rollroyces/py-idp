@@ -1,0 +1,95 @@
+PY-IDP COMMERCIAL LICENSE
+
+Copyright (c) 2026 Royce. All rights reserved.
+
+Notice: This is an outline of commercial license terms. The AUTHORITATIVE
+agreement is the signed Commercial License Agreement between you and the
+author, with applicable fees paid. This file is informational and is not
+itself a license grant.
+
+──────────────────────────────────────────────────────────────────────
+
+§1. Grant
+
+Subject to payment of the applicable license fee (see §6 below) and the
+terms of the signed agreement, the Licensor ("Royce") grants to Licensee
+a non-exclusive, non-transferable, worldwide, royalty-bearing license to:
+
+  (a) use, copy, modify, and embed py-idp (the "Software") in Licensee's
+      proprietary products and hosted services;
+  (b) distribute the Software, in object form or as part of Licensee's
+      proprietary product, to Licensee's end users;
+  (c) provide hosted services built around the Software to third parties,
+      without the obligation to publish source code imposed by the
+      GNU Affero General Public License v3.0.
+
+§2. Restrictions
+
+Licensee may NOT:
+
+  (a) redistribute the Software, in source or object form, as a
+      stand-alone product or library for the purpose of letting third
+      parties use the unmodified Software themselves;
+  (b) remove or alter any copyright notice, license header, or "About"
+      attribution in the Software;
+  (c) use the Licensor's name, trade names, trademarks, service marks,
+      or logos to endorse or promote any product or service without
+      prior written permission;
+  (d) sublicense, rent, lease, or lend the Software to any third party
+      except as embedded in Licensee's own product or service.
+
+§3. Permitted Modifications
+
+Licensee may modify the Software for use within Licensee's own products.
+Modified versions remain the property of the Licensor; Licensee receives
+only the license rights described in §1 above.
+
+§4. Support, Maintenance, Updates
+
+Support tiers are described in §6. Updates to the Software, when provided,
+are governed by this same Agreement. No obligation to provide support,
+maintenance, or updates is implied by this Agreement.
+
+§5. Warranty Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH
+LICENSEE. SHOULD THE SOFTWARE PROVE DEFECTIVE, LICENSEE ASSUMES THE COST
+OF ALL NECESSARY SERVICING, REPAIR, OR CORRECTION.
+
+§6. License Tiers and Fees (Indicative Annual Pricing)
+
+  Solo          $300 USD / year   single developer, single legal entity
+  Team          $1,500 USD / year up to 10 developers, single entity
+  Enterprise    contact          unlimited developers, includes SLA + support
+  SaaS-OEM      per-seat pricing  embed py-idp in a hosted SaaS, billed
+                                 per active monthly user or per-page metrics
+
+Pricing for perpetual licenses, OEM redistribution, and source-available
+options is available by separate agreement.
+
+§7. Term and Termination
+
+This Agreement is effective for the period paid. It terminates
+automatically if Licensee fails to pay the applicable fee or breaches
+any term. Upon termination, Licensee shall cease use and distribution of
+the Software and certify destruction of all copies in Licensee's
+possession.
+
+§8. Governing Law
+
+This Agreement is governed by the laws of the jurisdiction in which
+the Licensor resides. Disputes shall be resolved in the courts of that
+jurisdiction.
+
+──────────────────────────────────────────────────────────────────────
+
+To obtain a signed Commercial License Agreement, contact:
+    Royce (rollroyces)
+    <royce-license-placeholder@protonmail.com — replace before publishing>
+
+Include: number of developers, intended use (internal tool, on-prem
+product, hosted SaaS, or OEM), expected volume (users / pages / month),
+and any procurement or legal review deadlines.

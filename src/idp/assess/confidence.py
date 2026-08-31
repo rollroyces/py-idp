@@ -1,3 +1,15 @@
+# py-idp: general-purpose, AI-enabled Intelligent Document Processing.
+# Copyright (c) 2026 Royce.
+#
+# Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+# with the following addition: a commercial license is also available for organizations
+# that wish to embed py-idp in proprietary products / hosted SaaS without the AGPL
+# copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
+# contact <royce-license-placeholder@protonmail.com> for terms.
+#
+# This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Confidence assessment.
 
 Two strategies:
@@ -26,7 +38,13 @@ def _heuristic_confidence(doc: Document) -> dict[str, float]:
     Heuristics:
       - multimodal mode + clean digital -> 0.9 base
       - OCR_LLM mode -> 0.7 base
-      - per-field: missing/None -> 0.1, non-empty string -> +0.05, numeric -> +0.0
+      - per-field: missing/None -> 0.1
+      - per-field: present value (string non-empty, number, list, dict) -> base
+
+    NOTE: a numeric `0.0` or `0` is treated the same as any other present
+    numeric value (conf = base). If you need to penalize zero/extracted-as-zero
+    for compliance reasons, use `assess_confidence(use_llm=True)` or your own
+    rule that down-weights fields known to be "should never be zero".
     """
     base = 0.9 if doc.mode == "multimodal" else 0.7
     out: dict[str, float] = {}

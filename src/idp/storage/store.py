@@ -1,3 +1,15 @@
+# py-idp: general-purpose, AI-enabled Intelligent Document Processing.
+# Copyright (c) 2026 Royce.
+#
+# Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+# with the following addition: a commercial license is also available for organizations
+# that wish to embed py-idp in proprietary products / hosted SaaS without the AGPL
+# copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
+# contact <royce-license-placeholder@protonmail.com> for terms.
+#
+# This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Storage interface.
 
 Keeps the framework decoupled from any specific database / object store.
@@ -7,12 +19,15 @@ Swap in Postgres + S3 (or whatever) for production.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,15 +106,27 @@ class JsonFileStorage(Storage):
         self._lock = threading.Lock()
 
     def _read_all(self) -> dict[str, StoredResult]:
-        with self._lock:
-            by_id: dict[str, StoredResult] = {}
-            for line in self.path.read_text().splitlines():
-                line = line.strip()
-                if not line:
+        """Re-read the entire file. Skips corrupt lines (logs a warning).
+
+        Crashes during a `put()` (process kill, full disk) can leave a
+        partial trailing line. Reading the whole file should never take
+        down the app — we skip and continue. Use a real DB for transactions.
+        """
+        by_id: dict[str, StoredResult] = {}
+        with self.path.open() as f:
+            for line_no, raw in enumerate(f, start=1):
+                s = raw.strip()
+                if not s:
                     continue
-                d = json.loads(line)
-                by_id[d["id"]] = StoredResult(**d)
-            return by_id
+                try:
+                    d = json.loads(s)
+                    by_id[d["id"]] = StoredResult(**d)
+                except Exception as e:  # noqa: BLE001
+                    log.warning(
+                        "skipping corrupt line %d in %s: %s",
+                        line_no, self.path, e,
+                    )
+        return by_id
 
     def put(self, result: StoredResult) -> str:
         if not result.id:

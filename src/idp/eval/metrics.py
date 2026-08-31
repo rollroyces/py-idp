@@ -1,3 +1,15 @@
+# py-idp: general-purpose, AI-enabled Intelligent Document Processing.
+# Copyright (c) 2026 Royce.
+#
+# Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+# with the following addition: a commercial license is also available for organizations
+# that wish to embed py-idp in proprietary products / hosted SaaS without the AGPL
+# copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
+# contact <royce-license-placeholder@protonmail.com> for terms.
+#
+# This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Metrics for the eval harness.
 
 Implements:
@@ -31,20 +43,37 @@ def field_match(predicted: dict[str, Any], gold: dict[str, Any]) -> dict[str, bo
 
 
 def field_scores(per_doc: list[dict[str, bool]]) -> dict[str, float]:
-    """Micro-averaged precision/recall/F1 across documents."""
+    """Micro-averaged precision/recall/F1 across documents.
+
+    `per_doc` is a list of per-document `field_match()` outputs, one
+    per doc, each mapping gold_field_name -> bool (exact match).
+
+    Edge cases:
+      - empty input returns all zeros with n=0
+      - boolean `False` is counted as a False Negative (the field was
+        present in gold and the model didn't match it).
+    """
     if not per_doc:
         return {"precision": 0.0, "recall": 0.0, "f1": 0.0, "n": 0}
+    # union() over possibly-empty iterators is well-defined but an empty
+    # per_doc would crash here — guarded above.
     keys: set[str] = set().union(*(d.keys() for d in per_doc))
     tp = fp = fn = 0
     for d in per_doc:
         for k in keys:
-            pred_present = k in d
-            gold_present = k in d
-            if pred_present and gold_present:
+            # gold == present in keys; we treat absence as a separate FN below
+            if k in d:
                 if d[k]:
                     tp += 1
                 else:
                     fn += 1
+            else:
+                # model returned no key for a gold field -> FN
+                fn += 1
+    # FP only counts extra keys the model emitted beyond the gold set
+    for d in per_doc:
+        for k in d.keys() - keys:
+            fp += 1
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     recall = tp / (tp + fn) if (tp + fn) else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0

@@ -20,3 +20,5 @@ htmlcov/
 .cache/
 # Sample docs kept out of repo
 samples/private/
+# Generated example output
+examples/output/
