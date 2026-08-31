@@ -87,6 +87,8 @@ class Pipeline:
         parser: str | Parser | None = "auto",
         use_llm_confidence: bool = False,
         business_rules: list[BusinessRule] | None = None,
+        policy: "PolicyConfig | None" = None,
+        policy_path: str | None = None,
     ):
         # resolve objects if the caller passed names
         if isinstance(backend, str):
@@ -105,6 +107,16 @@ class Pipeline:
         self.parser_name = parser if isinstance(parser, str) else None
         self.use_llm_confidence = use_llm_confidence
         self.business_rules = business_rules or []
+        # Policy: load from path if given, else use the passed object
+        self.policy = None
+        if policy is not None:
+            self.policy = policy
+        elif policy_path is not None:
+            try:
+                from idp.rl.policy import PolicyConfig
+                self.policy = PolicyConfig.load(policy_path)
+            except Exception as e:  # noqa: BLE001
+                log.warning("failed to load policy from %s: %s", policy_path, e)
 
     def _resolve_parser(self, doc: Document) -> Parser:
         # explicit parser object? take it as-is
@@ -142,7 +154,9 @@ class Pipeline:
 
         # ASSESS -----------------------------------------------------------
         t = time.perf_counter()
-        assess_confidence(doc, backend=self.backend, use_llm=self.use_llm_confidence)
+        assess_confidence(
+            doc, backend=self.backend, use_llm=self.use_llm_confidence, policy=self.policy,
+        )
         timings.append(StageTiming("assess", time.perf_counter() - t))
 
         # VALIDATE ---------------------------------------------------------

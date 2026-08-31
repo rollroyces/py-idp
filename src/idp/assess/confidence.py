@@ -101,8 +101,14 @@ def assess_confidence(
     doc: Document,
     backend: Backend | None = None,
     use_llm: bool = False,
+    policy: "PolicyConfig | None" = None,
 ) -> Document:
-    """Attach doc.confidence (per-field dict of floats in 0..1)."""
+    """Attach doc.confidence (per-field dict of floats in 0..1).
+
+    If a `policy` is provided (an `idp.rl.PolicyConfig`), apply per-field
+    penalties so that fields humans have corrected frequently get
+    lower confidence scores and surface to HITL review.
+    """
     conf = _heuristic_confidence(doc)
     if use_llm and backend is not None:
         try:
@@ -111,5 +117,11 @@ def assess_confidence(
             conf = {k: 0.7 * conf.get(k, 0.5) + 0.3 * llm_conf.get(k, 0.5) for k in conf}
         except Exception as e:  # noqa: BLE001
             doc.errors.append(f"assess_failed: {e}")
+    if policy is not None:
+        try:
+            from idp.rl.policy import policy_to_penalised_confidence
+            conf = policy_to_penalised_confidence(conf, policy)
+        except Exception as e:  # noqa: BLE001
+            doc.errors.append(f"policy_apply_failed: {e}")
     doc.confidence = conf
     return doc

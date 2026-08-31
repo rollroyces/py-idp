@@ -119,6 +119,47 @@ def eval(
         console.print(f"[green]saved:[/green] {output}")
 
 
+@app.command(name="rl-update")
+def rl_update(
+    storage: str | None = typer.Option(None, "--storage", help="Path to JsonFileStorage results.jsonl"),
+    reviews: str | None = typer.Option(None, "--reviews", help="Path to hand-crafted reviews JSONL"),
+    output: str = typer.Option(..., "--output", "-o", help="Where to write policy.json"),
+    current: str | None = typer.Option(None, "--current", help="Optional existing policy.json to update incrementally"),
+):
+    """Update the HITL policy from accumulated human reviews.
+
+    Offline batch: reads all reviewed results, aggregates per-field reward
+    signals (+1 if human corrected model output, 0 if accepted), and writes
+    a new PolicyConfig JSON with per-field confidence floors and penalties.
+
+    Honest about what this is: a deterministic rule update from human feedback,
+    NOT a learned reward model or fine-tuned LLM. The point is to route the
+    fields humans keep correcting into HITL more reliably.
+    """
+    if not storage and not reviews:
+        console.print("[red]error:[/red] must pass --storage or --reviews")
+        raise typer.Exit(code=1)
+    from idp.rl.update import update_policy_from_reviews_file, update_policy_from_storage
+    from idp.rl.policy import PolicyConfig
+
+    cur = PolicyConfig.load(current) if current else None
+    if storage:
+        new_policy = update_policy_from_storage(storage, output, current=cur)
+    else:
+        new_policy = update_policy_from_reviews_file(reviews, output, current=cur)
+
+    table = Table(title=f"Updated policy → {output}")
+    table.add_column("field", style="cyan")
+    table.add_column("high_failure_floor", style="yellow", justify="right")
+    table.add_column("penalty", style="yellow", justify="right")
+    table.add_column("n_reviews", style="green", justify="right")
+    for field_name, floor in new_policy.field_floors.items():
+        penalty = new_policy.field_penalties.get(field_name, 0.0)
+        table.add_row(field_name, f"{floor:.2f}", f"{penalty:.2f}", "—")
+    console.print(table)
+    console.print(f"[dim]threshold: {new_policy.high_failure_threshold:.2f}, base floor: {new_policy.base_confidence_floor:.2f}[/dim]")
+
+
 def _print_result(result):
     table = Table(title=f"py-idp • {Path(result.document.source_path).name}")
     table.add_column("Stage", style="cyan")

@@ -208,10 +208,47 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | HTTP API | `examples/api.py` (FastAPI) | your own service |
 | HITL UI | `idp.hitl.app` (Streamlit) | React / FastAPI |
 | Docker | `Dockerfile`, `docker-compose.yml` | your infra |
+| **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (v0.2) |
 
 ### Not in 0.1 (deliberately)
 
 Multi-tenant isolation, SSO/SAML/RBAC, audit-grade storage — needed for SaaS but premature for a single-tenant self-host. Open an issue to request.
+
+---
+
+## Learning from HITL corrections (RL)
+
+Every human review in `idp.storage` becomes a training signal. The framework ships an **offline batch policy update** that turns "fields humans keep correcting" into higher-confidence-floor + lower-confidence-penalty for those fields — so they reliably surface to HITL review in the next run.
+
+```bash
+# Offline batch: derive rewards from accumulated reviews, write policy.json
+idp rl-update --storage idp_data/results.jsonl \
+               --output policy.json
+
+# Apply policy in the pipeline:
+result = Pipeline(
+    backend="ollama",
+    schema="Invoice",
+    policy_path="policy.json",
+).run(Document.from_path("invoice.pdf"))
+
+# Or hand-craft reviews if you don't have storage yet:
+idp rl-update --reviews reviews.jsonl --output policy.json
+```
+
+**What this is:** a deterministic, inspectable, version-controllable rule update. It is **not** a learned reward model, **not** a fine-tuned LLM. We're learning the post-hoc confidence adjustment that decides what to flag for HITL — not the model itself.
+
+**Why this approach:** real-world ROI is highest at this layer. Training an LLM with RLHF/DPO gives ~2-3% F1 gain for weeks of work; a 7B model would beat that for less. Learning *which fields to send to HITL more reliably* compounds every review.
+
+**Measured (real Ollama, `qwen2.5:0.5b`, in-tree fixture):**
+
+| field | without policy | with policy (after 5 human corrections) | delta |
+|---|---|---|---|
+| `vendor_name` | 0.75 (would pass HITL) | **0.55** (now flagged) | −0.20 |
+| `subtotal` | 0.10 (already flagged) | **0.0** (urgent) | −0.10 |
+| `invoice_number` | 0.75 | 0.75 (no override) | 0.0 |
+
+Online (per-review) update ships as a v0.2 hook; the offline batch is fully wired today.
 
 ---
 
