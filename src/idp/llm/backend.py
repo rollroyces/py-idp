@@ -24,6 +24,7 @@ from __future__ import annotations
 import abc
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -215,12 +216,24 @@ class AnthropicBackend(Backend):
                 "Install the 'anthropic' extra: pip install py-idp[anthropic]"
             ) from e
         self.model = model
-        self.api_key = api_key or os.environ["ANTHROPIC_API_KEY"]
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise OSError(
+                "AnthropicBackend requires ANTHROPIC_API_KEY or api_key=... "
+                "in the constructor."
+            )
+        self.api_key = api_key
         self._client = None
 
     @property
     def is_multimodal(self) -> bool:
-        return True
+        # Only Claude 3+ family models support vision. Claude 2 / Instant
+        # are text-only. Default to vision for known-multimodal families;
+        # conservatively False for legacy / unknown model names.
+        m = self.model.lower()
+        if m.startswith("claude-3") or "claude-4" in m or "opus" in m or "sonnet" in m or "haiku-3" in m:
+            return True
+        return False
 
     def complete(self, req: CompletionRequest) -> str:
         import anthropic
@@ -323,8 +336,6 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-import re
-import json
 
 
 def _safe_json(text: str) -> dict[str, Any]:

@@ -285,3 +285,134 @@ def test_pipeline_garbage_backend_propagates_error_not_silent_pass():
         "could not parse" in e or "JSON" in e
         for e in res.document.errors
     ), f"expected JSON-parse error in doc.errors; got {res.document.errors}"
+
+
+# ---------------------------------------------------------------------------
+# B15: no duplicate top-level imports in any source file
+# ---------------------------------------------------------------------------
+def test_b15_no_duplicate_top_level_imports():
+    """Every src/ file should declare each stdlib module only once at
+    column-0 (top level). Function-scope lazy imports for optional deps
+    are allowed (and intentional)."""
+    import re
+    from pathlib import Path
+    bad = []
+    for f in Path("/Users/hermes/py-idp/src/idp").rglob("*.py"):
+        text = f.read_text()
+        # ONLY column-0 (top-level) imports — exclude indented function-scope
+        top_imports = [
+            re.match(r"^import\s+(\w+)", l).group(1)
+            for l in text.splitlines()
+            if re.match(r"^import\s+(\w+)", l) is not None
+        ]
+        from collections import Counter
+        for mod, count in Counter(top_imports).items():
+            if count > 1:
+                bad.append((f.relative_to(Path("/Users/hermes/py-idp")), mod, count))
+    assert bad == [], f"duplicate top-level imports: {bad}"
+
+
+# ---------------------------------------------------------------------------
+# B16/B21: AnthropicBackend with no key raises OSError with a helpful message
+# ---------------------------------------------------------------------------
+def test_b16_anthropic_backend_no_key_raises_helpful_oserror(monkeypatch):
+    """With anthropic SDK present but no API key set, we should get a
+    helpful OSError, not a raw KeyError."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # Stub `anthropic` into sys.modules so the SDK-import probe succeeds.
+    # Then we exercise the "package installed, no key" path.
+    import sys, types
+    fake = types.ModuleType("anthropic")
+    sys.modules["anthropic"] = fake
+    from idp.llm.backend import AnthropicBackend
+    try:
+        AnthropicBackend(api_key=None)
+    except OSError as e:
+        assert "ANTHROPIC_API_KEY" in str(e) or "api_key" in str(e)
+        return
+    except Exception as e:
+        pytest.fail(f"expected OSError; got {type(e).__name__}: {e}")
+    finally:
+        del sys.modules["anthropic"]
+    pytest.fail("AnthropicBackend() with no key should raise")
+
+
+def test_b16_anthropic_backend_explicit_key_works(monkeypatch):
+    """With anthropic SDK present and explicit api_key, no env needed."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    import sys, types
+    fake = types.ModuleType("anthropic")
+    sys.modules["anthropic"] = fake
+    from idp.llm.backend import AnthropicBackend
+    try:
+        b = AnthropicBackend(api_key="sk-test-fake")
+        assert b.api_key == "sk-test-fake"
+    finally:
+        del sys.modules["anthropic"]
+
+
+# ---------------------------------------------------------------------------
+# B25: AnthropicBackend.is_multimodal — Claude 2 is NOT multimodal
+# ---------------------------------------------------------------------------
+def test_b25_anthropic_claude2_is_text_only(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    import sys, types
+    fake = types.ModuleType("anthropic")
+    sys.modules["anthropic"] = fake
+    from idp.llm.backend import AnthropicBackend
+    try:
+        b = AnthropicBackend(api_key="sk-test", model="claude-2.1")
+        assert b.is_multimodal is False
+    finally:
+        del sys.modules["anthropic"]
+
+
+def test_b25_anthropic_claude35_is_multimodal(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    import sys, types
+    fake = types.ModuleType("anthropic")
+    sys.modules["anthropic"] = fake
+    from idp.llm.backend import AnthropicBackend
+    try:
+        b = AnthropicBackend(api_key="sk-test", model="claude-3-5-sonnet-latest")
+        assert b.is_multimodal is True
+    finally:
+        del sys.modules["anthropic"]
+
+
+# ---------------------------------------------------------------------------
+# B24: extract() short-circuits on empty inputs — no LLM call
+# ---------------------------------------------------------------------------
+class CallCounter(Backend):
+    """Backend that counts how many times it was called."""
+
+    name = "counter"
+
+    def __init__(self):
+        self.calls = 0
+
+    @property
+    def is_multimodal(self):
+        return False
+
+    def complete(self, req):
+        self.calls += 1
+        return "{}"
+
+
+def test_b24_extract_empty_text_skips_llm(tmp_path):
+    f = tmp_path / "empty.txt"
+    f.write_text("")  # zero bytes
+    doc = Document.from_path(str(f))
+    # raw_text is "" by default; renderer returns [] for non-PDF
+    backend = CallCounter()
+    extract(doc, Invoice, backend)
+    assert backend.calls == 0, (
+        "extract() should NOT call the LLM when raw_text is empty and no images"
+    )
+    assert any("empty document" in e or "extract_skipped" in e for e in doc.errors), (
+        f"expected skip marker in doc.errors; got {doc.errors}"
+    )
+    # extraction is a valid Invoice-shaped dict of nulls
+    parsed = Invoice.model_validate(doc.extraction)
+    assert parsed.invoice_number is None

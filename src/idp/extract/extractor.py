@@ -187,6 +187,26 @@ def extract(
     if mode == ExtractionMode.MULTIMODAL and backend.is_multimodal:
         images_b64 = render_first_n_pages_to_images(doc, n=3)
 
+    # Short-circuit on empty inputs: don't burn an LLM call when the
+    # parser found nothing. The caller still gets a schema-shaped stub
+    # back so downstream stages behave consistently, and the short-circuit
+    # is logged via doc.errors so it's visible in the HITL review.
+    if not text and not images_b64:
+        doc.errors.append(
+            "extract_skipped: empty document (no text from parser, no images); "
+            "returned schema-shaped nulls without calling LLM"
+        )
+        validated: dict[str, Any] = {}
+        try:
+            validated = schema.model_validate({}).model_dump(mode="json")
+        except Exception:  # noqa: BLE001
+            # Schema requires non-Optional fields; return raw nulls.
+            validated = {"_raw": "<empty input>"}
+        doc.extraction = validated
+        doc.extraction_schema = schema.__name__
+        doc.mode = mode.value if isinstance(mode, ExtractionMode) else str(mode)
+        return doc
+
     messages = _build_messages(schema, text, images_b64, extra_instructions=extra_instructions)
     req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
     raw = ""
