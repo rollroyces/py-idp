@@ -1,4 +1,12 @@
 """Public surface for the rl module."""
+from idp.rl.calibrate import (
+    CalibrationReport,
+    FieldEval,
+    confidence_calibration_error,
+    evaluate_policy,
+    load_reviews,
+    synthetic_reviews_from_gold,
+)
 from idp.rl.policy import (
     PolicyConfig,
     policy_to_penalised_confidence,
@@ -18,14 +26,20 @@ from idp.rl.update import (
 )
 
 __all__ = [
+    "CalibrationReport",
+    "FieldEval",
     "FieldReward",
     "PolicyConfig",
     "PolicyStats",
     "ReviewRewards",
     "aggregate_rewards",
+    "confidence_calibration_error",
     "derive_field_rewards",
+    "evaluate_policy",
+    "load_reviews",
     "policy_to_penalised_confidence",
     "policy_to_review_flags",
+    "synthetic_reviews_from_gold",
     "update_policy",
     "update_policy_from_reviews_file",
     "update_policy_from_storage",

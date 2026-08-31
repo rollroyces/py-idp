@@ -250,6 +250,28 @@ idp rl-update --reviews reviews.jsonl --output policy.json
 
 Online (per-review) update ships as a v0.2 hook; the offline batch is fully wired today.
 
+### Calibration eval — does the policy actually do what it claims?
+
+```bash
+# Generate synthetic reviews from gold truth, derive a policy, evaluate it
+idp rl-update --reviews reviews.jsonl --output policy.json
+idp rl-eval   --policy policy.json --fixtures src/idp/eval/datasets/invoices \
+              --injection-rate 0.30 --output calibration.json
+```
+
+Reports **hit rate when policy fires** (did humans correct what we flagged?) and **true-accept rate when policy silent** (did humans accept what we didn't flag?), with explicit `n=` and a `synthetic=true` flag — synthetic reviews are biased optimistic (gold truth IS the human's correction), so real HITL data will be noisier.
+
+**Honest measured results (synthetic reviews from 3 in-tree invoices, `qwen2.5:0.5b` real Ollama run, fields × docs = 27 pairs):**
+
+| metric | value | what it means |
+|---|---|---|
+| policy caught (flag → human corrected) | **21** | without the policy, these errors would have escaped HITL |
+| policy silenced (was flagged, no longer flagged) | **0** | no regressions |
+| already flagged by both | 2 | no change |
+| model was right, not flagged | 4 | correct accepts — model was actually right |
+
+**Honest call-out:** with `qwen2.5:0.5b` specifically, the base confidence heuristic is so pessimistic that almost every error was already escaping HITL — so the policy's gain looks dramatic. A larger model with cleaner confidence calibration would benefit less. The honest sample size here is 27 (field, doc) pairs; do not extrapolate beyond this.
+
 ---
 
 ## Development

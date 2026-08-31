@@ -160,6 +160,86 @@ def rl_update(
     console.print(f"[dim]threshold: {new_policy.high_failure_threshold:.2f}, base floor: {new_policy.base_confidence_floor:.2f}[/dim]")
 
 
+@app.command(name="rl-eval")
+def rl_eval(
+    reviews: str | None = typer.Option(None, "--reviews", help="Real reviews JSONL (set if NOT using --synthetic)"),
+    policy: str = typer.Option(..., "--policy", help="policy.json to evaluate"),
+    fixtures: str | None = typer.Option(None, "--fixtures", help="Eval dataset dir for --synthetic mode"),
+    synthetic_injection_rate: float = typer.Option(0.30, "--injection-rate", help="Fraction of fields to corrupt when --synthetic"),
+    output: str | None = typer.Option(None, "--output", "-o"),
+):
+    """Evaluate whether the policy actually does what it claims.
+
+    Honest about scope: --synthetic mode generates biased-optimistic
+    reviews from gold truth (the gold truth IS what the human corrected
+    TO, so correction signals are artificially clean). Real HITL data
+    is what makes these numbers trustworthy.
+
+    Reports:
+      - hit rate when policy fires (was the flagged field actually corrected?)
+      - true-accept rate when policy silent (was the non-flagged field accepted?)
+      - per-field breakdown
+      - overall review-burden efficiency
+    """
+    from idp.rl.calibrate import (
+        evaluate_policy,
+        load_reviews,
+        synthetic_reviews_from_gold,
+    )
+    from idp.rl.policy import PolicyConfig
+
+    pol = PolicyConfig.load(policy)
+
+    if reviews:
+        revs = load_reviews(reviews)
+        synthetic = False
+        notes_extra = "Real reviews (synthetic=false)."
+    elif fixtures:
+        revs, _ = synthetic_reviews_from_gold(
+            fixtures, injection_rate=synthetic_injection_rate, seed=0,
+        )
+        synthetic = True
+        notes_extra = "SYNTHETIC reviews from gold truth."
+    else:
+        console.print("[red]error:[/red] pass --reviews or --fixtures (with --synthetic)")
+        raise typer.Exit(code=1)
+
+    report = evaluate_policy(revs, pol, synthetic=synthetic)
+    report.policy_path = policy
+    report.notes.append(notes_extra)
+
+    # Print table
+    table = Table(title=f"RL calibration — {len(revs)} reviews ({'SYNTHETIC' if synthetic else 'REAL'})")
+    table.add_column("field", style="cyan")
+    table.add_column("n", justify="right")
+    table.add_column("corrected_rate", style="yellow", justify="right")
+    table.add_column("fires", style="red", justify="center")
+    table.add_column("hit_rate_when_fires", style="green", justify="right")
+    table.add_column("true_accept_when_silent", style="green", justify="right")
+    for fe in report.field_evals:
+        table.add_row(
+            fe.field,
+            str(fe.n_reviews),
+            f"{fe.corrected_rate:.2f}",
+            "yes" if fe.policy_fires else "no",
+            f"{fe.hit_rate_when_fires:.2f}" if fe.hit_rate_when_fires is not None else "—",
+            f"{fe.true_accept_rate_when_silent:.2f}" if fe.true_accept_rate_when_silent is not None else "—",
+        )
+    console.print(table)
+    console.print()
+    o = report.overall
+    console.print(f"overall hit_rate_when_fires:    [bold green]{o.get('hit_rate_when_fires', 0):.2f}[/bold green]")
+    console.print(f"overall true_accept_when_silent:[bold green]{o.get('true_accept_rate_when_silent', 0):.2f}[/bold green]")
+    console.print(f"review_efficiency (hit/(hit+false)): [bold]{o.get('review_efficiency', 0):.2f}[/bold]")
+    console.print()
+    for note in report.notes:
+        console.print(f"[yellow]note:[/yellow] {note}")
+
+    if output:
+        Path(output).write_text(json.dumps(report.as_dict(), indent=2))
+        console.print(f"\n[green]saved:[/green] {output}")
+
+
 def _print_result(result):
     table = Table(title=f"py-idp • {Path(result.document.source_path).name}")
     table.add_column("Stage", style="cyan")
