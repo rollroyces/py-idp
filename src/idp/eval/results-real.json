@@ -1,0 +1,307 @@
+{
+  "dataset": "invoices (3 docs)",
+  "rows": [
+    {
+      "strategy": "mock",
+      "schema_valid_rate": 1.0,
+      "field_f1": 0.0,
+      "n_docs": 3,
+      "avg_sec_per_doc": 0.001
+    },
+    {
+      "strategy": "qwen2.5:0.5b",
+      "schema_valid_rate": 1.0,
+      "field_f1": 0.9615384615384615,
+      "field_precision": 1.0,
+      "field_recall": 0.9259259259259259,
+      "n_docs": 3,
+      "avg_sec_per_doc": 2.0489096106709135,
+      "per_doc": [
+        {
+          "doc": "docs/inv-001.txt",
+          "extraction": {
+            "invoice_number": "INV-2026-001",
+            "invoice_date": "2026-04-12",
+            "due_date": "2026-05-12",
+            "vendor_name": "Acme Widgets Ltd.",
+            "vendor_address": "123 Industrial Way, Springfield",
+            "customer_name": "Globex Corporation",
+            "customer_address": "456 Corporate Plaza, Shelbyville",
+            "subtotal": null,
+            "tax_amount": null,
+            "total_amount": 540.0,
+            "currency": "USD",
+            "line_items": [
+              {
+                "description": "Widget Standard",
+                "quantity": 10.0,
+                "unit_price": 25.0,
+                "total": 250.0
+              },
+              {
+                "description": "Widget Premium",
+                "quantity": 5.0,
+                "unit_price": 40.0,
+                "total": 200.0
+              },
+              {
+                "description": "Widget Installation Fee",
+                "quantity": 1.0,
+                "unit_price": 50.0,
+                "total": 50.0
+              }
+            ]
+          },
+          "gold": {
+            "invoice_number": "INV-2026-001",
+            "vendor_name": "Acme Widgets Ltd.",
+            "customer_name": "Globex Corporation",
+            "invoice_date": "2026-04-12",
+            "due_date": "2026-05-12",
+            "currency": "USD",
+            "subtotal": 500.0,
+            "tax_amount": 40.0,
+            "total_amount": 540.0
+          }
+        },
+        {
+          "doc": "docs/inv-002.txt",
+          "extraction": {
+            "invoice_number": "INV-2026-002",
+            "invoice_date": "2026-05-18",
+            "due_date": "2026-06-18",
+            "vendor_name": "Northwind Coffee Roasters",
+            "vendor_address": "Contoso Ltd",
+            "customer_name": "Contoso Ltd",
+            "customer_address": "Contoso Ltd",
+            "subtotal": 605.0,
+            "tax_amount": 60.5,
+            "total_amount": 665.5,
+            "currency": "USD",
+            "line_items": [
+              {
+                "description": "Espresso 1kg",
+                "quantity": 20.0,
+                "unit_price": 15.0,
+                "total": 300.0
+              },
+              {
+                "description": "French Roast 1kg",
+                "quantity": 15.0,
+                "unit_price": 15.0,
+                "total": 225.0
+              },
+              {
+                "description": "Cold Brew Kit",
+                "quantity": 2.0,
+                "unit_price": 40.0,
+                "total": 80.0
+              }
+            ]
+          },
+          "gold": {
+            "invoice_number": "INV-2026-002",
+            "vendor_name": "Northwind Coffee Roasters",
+            "customer_name": "Contoso Ltd",
+            "invoice_date": "2026-05-18",
+            "due_date": "2026-06-18",
+            "currency": "USD",
+            "subtotal": 605.0,
+            "tax_amount": 60.5,
+            "total_amount": 665.5
+          }
+        },
+        {
+          "doc": "docs/inv-003.txt",
+          "extraction": {
+            "invoice_number": "INV-2026-003",
+            "invoice_date": "2026-06-02",
+            "due_date": "2026-06-30",
+            "vendor_name": "Sun River Studios",
+            "vendor_address": "123 Main Street, Anytown USA",
+            "customer_name": "Fabrikam Inc.",
+            "customer_address": "123 Main Street, Anytown USA",
+            "subtotal": 1850.0,
+            "tax_amount": 148.0,
+            "total_amount": 1998.0,
+            "currency": "USD",
+            "line_items": [
+              {
+                "description": "Photographer half-day",
+                "quantity": 4.0,
+                "unit_price": 200.0,
+                "total": 800.0
+              },
+              {
+                "description": "Photo editing (per image)",
+                "quantity": 40.0,
+                "unit_price": 25.0,
+                "total": 1000.0
+              },
+              {
+                "description": "Print delivery",
+                "quantity": 1.0,
+                "unit_price": 50.0,
+                "total": 50.0
+              }
+            ]
+          },
+          "gold": {
+            "invoice_number": "INV-2026-003",
+            "vendor_name": "Sun River Studios",
+            "customer_name": "Fabrikam Inc.",
+            "invoice_date": "2026-06-02",
+            "due_date": "2026-06-30",
+            "currency": "USD",
+            "subtotal": 1850.0,
+            "tax_amount": 148.0,
+            "total_amount": 1998.0
+          }
+        }
+      ]
+    }
+  ],
+  "per_doc_qwen": [
+    {
+      "doc": "docs/inv-001.txt",
+      "extraction": {
+        "invoice_number": "INV-2026-001",
+        "invoice_date": "2026-04-12",
+        "due_date": "2026-05-12",
+        "vendor_name": "Acme Widgets Ltd.",
+        "vendor_address": "123 Industrial Way, Springfield",
+        "customer_name": "Globex Corporation",
+        "customer_address": "456 Corporate Plaza, Shelbyville",
+        "subtotal": null,
+        "tax_amount": null,
+        "total_amount": 540.0,
+        "currency": "USD",
+        "line_items": [
+          {
+            "description": "Widget Standard",
+            "quantity": 10.0,
+            "unit_price": 25.0,
+            "total": 250.0
+          },
+          {
+            "description": "Widget Premium",
+            "quantity": 5.0,
+            "unit_price": 40.0,
+            "total": 200.0
+          },
+          {
+            "description": "Widget Installation Fee",
+            "quantity": 1.0,
+            "unit_price": 50.0,
+            "total": 50.0
+          }
+        ]
+      },
+      "gold": {
+        "invoice_number": "INV-2026-001",
+        "vendor_name": "Acme Widgets Ltd.",
+        "customer_name": "Globex Corporation",
+        "invoice_date": "2026-04-12",
+        "due_date": "2026-05-12",
+        "currency": "USD",
+        "subtotal": 500.0,
+        "tax_amount": 40.0,
+        "total_amount": 540.0
+      }
+    },
+    {
+      "doc": "docs/inv-002.txt",
+      "extraction": {
+        "invoice_number": "INV-2026-002",
+        "invoice_date": "2026-05-18",
+        "due_date": "2026-06-18",
+        "vendor_name": "Northwind Coffee Roasters",
+        "vendor_address": "Contoso Ltd",
+        "customer_name": "Contoso Ltd",
+        "customer_address": "Contoso Ltd",
+        "subtotal": 605.0,
+        "tax_amount": 60.5,
+        "total_amount": 665.5,
+        "currency": "USD",
+        "line_items": [
+          {
+            "description": "Espresso 1kg",
+            "quantity": 20.0,
+            "unit_price": 15.0,
+            "total": 300.0
+          },
+          {
+            "description": "French Roast 1kg",
+            "quantity": 15.0,
+            "unit_price": 15.0,
+            "total": 225.0
+          },
+          {
+            "description": "Cold Brew Kit",
+            "quantity": 2.0,
+            "unit_price": 40.0,
+            "total": 80.0
+          }
+        ]
+      },
+      "gold": {
+        "invoice_number": "INV-2026-002",
+        "vendor_name": "Northwind Coffee Roasters",
+        "customer_name": "Contoso Ltd",
+        "invoice_date": "2026-05-18",
+        "due_date": "2026-06-18",
+        "currency": "USD",
+        "subtotal": 605.0,
+        "tax_amount": 60.5,
+        "total_amount": 665.5
+      }
+    },
+    {
+      "doc": "docs/inv-003.txt",
+      "extraction": {
+        "invoice_number": "INV-2026-003",
+        "invoice_date": "2026-06-02",
+        "due_date": "2026-06-30",
+        "vendor_name": "Sun River Studios",
+        "vendor_address": "123 Main Street, Anytown USA",
+        "customer_name": "Fabrikam Inc.",
+        "customer_address": "123 Main Street, Anytown USA",
+        "subtotal": 1850.0,
+        "tax_amount": 148.0,
+        "total_amount": 1998.0,
+        "currency": "USD",
+        "line_items": [
+          {
+            "description": "Photographer half-day",
+            "quantity": 4.0,
+            "unit_price": 200.0,
+            "total": 800.0
+          },
+          {
+            "description": "Photo editing (per image)",
+            "quantity": 40.0,
+            "unit_price": 25.0,
+            "total": 1000.0
+          },
+          {
+            "description": "Print delivery",
+            "quantity": 1.0,
+            "unit_price": 50.0,
+            "total": 50.0
+          }
+        ]
+      },
+      "gold": {
+        "invoice_number": "INV-2026-003",
+        "vendor_name": "Sun River Studios",
+        "customer_name": "Fabrikam Inc.",
+        "invoice_date": "2026-06-02",
+        "due_date": "2026-06-30",
+        "currency": "USD",
+        "subtotal": 1850.0,
+        "tax_amount": 148.0,
+        "total_amount": 1998.0
+      }
+    }
+  ]
+}

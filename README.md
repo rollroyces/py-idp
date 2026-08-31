@@ -51,9 +51,20 @@ print(result.validation)    # dict — schema + business-rule outcomes
 | classification | `invoice` (conf 0.99) |
 | extraction shape | 12 fields, 2 line items |
 | validation | PASS |
-| exact-match fields vs gold | **9 / 9 = 100 %** |
-| low-confidence flags (HITL) | 2 (vendor_address, customer_address) |
+| exact-match fields vs gold | **7 / 9 = 78 %** (single doc) |
+| low-confidence flags (HITL) | 2 (subtotal, tax_amount — small-model arithmetic) |
 | latency (mocked LLM) | < 2 ms |
+
+**Full eval harness, 3 invoices, real local Ollama (`qwen2.5:0.5b`, 397 MB):**
+
+| metric | value |
+|---|---|
+| schema-valid rate | **100 %** (3 / 3) |
+| field F1 | **0.96** (precision 1.00, recall 0.93) |
+| latency | **2.05 s / doc** on Apple Silicon |
+| per-doc exact match | inv-001 7/9 · inv-002 9/9 · inv-003 9/9 |
+
+The framework is honest about what small models get wrong: arithmetic on tiny models (`subtotal`/`tax_amount`) is flagged with conf 0.10 and routed to HITL review, not silently passed.
 
 ---
 
