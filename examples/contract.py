@@ -8,7 +8,7 @@ from idp.llm.backend import get_backend
 from idp.pipeline.pipeline import Pipeline
 from idp.validate.validator import required_fields_rule
 
-SAMPLE = Path(__file__).parent.parent / "idp/eval/datasets/contracts/docs/svc-001.txt"
+SAMPLE = Path(__file__).parent.parent / "src/idp/eval/datasets/contracts/docs/svc-001.txt"
 
 
 def main() -> None:

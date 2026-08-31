@@ -11,9 +11,9 @@ from idp.llm.backend import get_backend
 from idp.pipeline.pipeline import Pipeline, save_result
 
 DOCS = [
-    ("idp/eval/datasets/invoices/docs/inv-001.txt", "Invoice"),
-    ("idp/eval/datasets/invoices/docs/inv-002.txt", "Invoice"),
-    ("idp/eval/datasets/contracts/docs/svc-001.txt", "Contract"),
+    ("src/idp/eval/datasets/invoices/docs/inv-001.txt", "Invoice"),
+    ("src/idp/eval/datasets/invoices/docs/inv-002.txt", "Invoice"),
+    ("src/idp/eval/datasets/contracts/docs/svc-001.txt", "Contract"),
 ]
 
 
