@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+.env
+.env.local
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.swp
+.DS_Store
+# Models / caches
+.model_cache/
+.cache/
+# Sample docs kept out of repo
+samples/private/

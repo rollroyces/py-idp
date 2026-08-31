@@ -1,0 +1,17 @@
+INVOICE INV-2026-003
+
+Vendor: Sun River Studios
+Customer: Fabrikam Inc.
+
+Date Issued: 2026-06-02
+Payment Due: 2026-06-30
+Currency: USD
+
+Description                    Hours    Rate     Amount
+Photographer half-day           4        $200     $800
+Photo editing (per image)       40       $25      $1000
+Print delivery                  1        $50      $50
+
+Subtotal:  $1850.00
+Sales tax: $148.00
+TOTAL DUE: $1998.00

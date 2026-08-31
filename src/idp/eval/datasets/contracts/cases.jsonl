@@ -1,0 +1,2 @@
+{"doc_path": "docs/svc-001.txt", "schema": "Contract", "gold": {"title": "MASTER SERVICES AGREEMENT", "effective_date": "2026-03-15", "expiration_date": "2027-03-15", "governing_law": "California", "currency": "USD", "total_value": 250000.00}}
+{"doc_path": "docs/nda-002.txt", "schema": "Contract", "gold": {"title": "NON-DISCLOSURE AGREEMENT", "effective_date": "2025-11-04", "expiration_date": "2027-11-04", "governing_law": "Delaware", "currency": "USD", "total_value": 0.0}}

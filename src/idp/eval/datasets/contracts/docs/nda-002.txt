@@ -1,0 +1,16 @@
+NON-DISCLOSURE AGREEMENT
+
+Effective Date: 2025-11-04
+Expiration Date: 2027-11-04
+
+Disclosing Party: Hooli LLC
+Receiving Party: Pied Piper Inc.
+
+Governing Law: Delaware
+
+Total contract value: USD 0.00
+
+Obligations:
+  - Receiving Party shall not disclose Confidential Information to third parties.
+  - Disclosing Party shall mark all materials as "Confidential".
+  - Receiving Party shall return all materials within 30 days of termination.

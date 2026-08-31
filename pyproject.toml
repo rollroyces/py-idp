@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-idp"
+version = "0.1.0"
+description = "General-purpose, AI-enabled Intelligent Document Processing framework for Python. OCR + multimodal extraction with Pydantic schemas, confidence assessment, HITL review, and a built-in eval harness."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Royce" }]
+keywords = ["idp", "document-ai", "ocr", "llm", "extraction", "pydantic", "multimodal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "pydantic>=2.5",
+    "typer>=0.12",
+    "rich>=13.7",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "tenacity>=8.2",
+    "streamlit>=1.32",
+    "pdfplumber>=0.10",        # lightweight fallback parser
+]
+
+[project.optional-dependencies]
+# Default parser (IBM Docling). Heavy: ~500MB model deps.
+docling = ["docling>=2.0"]
+# Optional OCR fallback for noisy scans
+ocr = ["pytesseract>=0.3.10", "Pillow>=10.0"]
+# OpenAI-compatible API (also works with Anthropic via compatible gateways)
+openai = ["openai>=1.30"]
+anthropic = ["anthropic>=0.27"]
+ollama = ["ollama>=0.2"]
+# API server example (FastAPI + uvicorn)
+api = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
+# China LLM providers (OpenAI-compatible; no extra deps required — uses httpx)
+# The `openai` SDK is optional; install it if you prefer the SDK client to raw HTTP.
+china = ["openai>=1.30"]
+# Evaluation
+eval = ["datasets>=2.18", "pandas>=2.1"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "types-PyYAML",
+]
+
+[project.scripts]
+idp = "idp.pipeline.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/rollroyces/py-idp"
+Issues = "https://github.com/rollroyces/py-idp/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"

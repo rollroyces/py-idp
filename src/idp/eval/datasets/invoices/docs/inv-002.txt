@@ -1,0 +1,17 @@
+INVOICE INV-2026-002
+
+Vendor: Northwind Coffee Roasters
+Customer: Contoso Ltd
+
+Date: 2026-05-18
+Due: 2026-06-18
+Currency: USD
+
+Item                   Qty   Price    Line Total
+Espresso 1kg            20    $15      $300
+French Roast 1kg        15    $15      $225
+Cold Brew Kit           2     $40      $80
+
+Subtotal: $605.00
+Tax (10%): $60.50
+Total Due: $665.50

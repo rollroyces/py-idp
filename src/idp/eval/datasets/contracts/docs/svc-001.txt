@@ -1,0 +1,18 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is entered into as of 2026-03-15
+(the "Effective Date") between Acme Cloud, Inc. ("Provider") and Initech LLC
+("Customer").
+
+Term. The term of this Agreement shall commence on the Effective Date and
+expire on 2027-03-15 unless extended in writing.
+
+Governing Law. This Agreement shall be governed by the laws of the State of
+California.
+
+Total contract value: USD 250,000.
+
+Key obligations:
+  - Provider shall maintain 99.9% uptime.
+  - Customer shall pay invoices within 30 days.
+  - Both parties shall keep confidential information secret for 5 years.

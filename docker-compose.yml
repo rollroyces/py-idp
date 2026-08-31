@@ -1,0 +1,20 @@
+services:
+  idp-api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      - IDP_API_KEY=${IDP_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - idp_data:/data/idp
+  idp-ui:
+    build: .
+    command: streamlit run src/idp/hitl/app.py --server.port 8501 --server.address 0.0.0.0
+    ports: ["8501:8501"]
+    depends_on: [idp-api]
+    environment:
+      - IDP_RESULTS=/data/idp/results.jsonl
+
+volumes:
+  idp_data:

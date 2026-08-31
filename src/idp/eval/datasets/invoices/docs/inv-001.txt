@@ -1,0 +1,24 @@
+INVOICE INV-2026-001
+
+From:
+  Acme Widgets Ltd.
+  123 Industrial Way, Springfield
+
+To:
+  Globex Corporation
+  456 Corporate Plaza, Shelbyville
+
+Invoice Date:    2026-04-12
+Due Date:        2026-05-12
+Currency:        USD
+
+Description                 Qty   Unit Price      Total
+Widget Standard             10    $25.00          $250.00
+Widget Premium              5     $40.00          $200.00
+Widget Installation Fee     1     $50.00          $50.00
+
+Subtotal: $500.00
+Tax (8%): $40.00
+TOTAL:    $540.00
+
+Payment Terms: Net 30. Wire transfer to acct ending 1234.
