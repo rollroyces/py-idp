@@ -23,7 +23,6 @@ from typing import Any
 
 from idp.core.document import Document
 
-
 BusinessRule = Callable[[dict[str, Any]], tuple[bool, str | None]]
 """
 A BusinessRule takes the extracted dict and returns (passed, reason_if_failed).
@@ -50,7 +49,7 @@ def validate(doc: Document, rules: list[BusinessRule] | None = None) -> Document
     result: dict[str, Any] = _validate_pydantic(doc)
     rule_results: list[dict[str, Any]] = []
     if rules:
-        for i, rule in enumerate(rules):
+        for rule in rules:
             try:
                 ok, reason = rule(doc.extraction or {})
                 rule_results.append({"rule": rule.__name__, "passed": ok, "reason": reason})

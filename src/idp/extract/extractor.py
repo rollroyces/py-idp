@@ -30,8 +30,7 @@ import base64
 import json
 import logging
 import re
-from pathlib import Path
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -171,7 +170,7 @@ def render_first_n_pages_to_images(doc: Document, n: int = 3) -> list[str]:
 # ---------------------------------------------------------------------------
 def extract(
     doc: Document,
-    schema: Type[BaseModel],
+    schema: type[BaseModel],
     backend: Backend,
     mode: ExtractionMode | str | None = None,
     extra_instructions: str = "",
@@ -196,13 +195,13 @@ def extract(
             "extract_skipped: empty document (no text from parser, no images); "
             "returned schema-shaped nulls without calling LLM"
         )
-        validated: dict[str, Any] = {}
+        stub: dict[str, Any] = {}
         try:
-            validated = schema.model_validate({}).model_dump(mode="json")
+            stub = schema.model_validate({}).model_dump(mode="json")
         except Exception:  # noqa: BLE001
             # Schema requires non-Optional fields; return raw nulls.
-            validated = {"_raw": "<empty input>"}
-        doc.extraction = validated
+            stub = {"_raw": "<empty input>"}
+        doc.extraction = stub
         doc.extraction_schema = schema.__name__
         doc.mode = mode.value if isinstance(mode, ExtractionMode) else str(mode)
         return doc

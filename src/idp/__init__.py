@@ -23,7 +23,7 @@ Design draws from:
   - Unstructured-IO/unstructured              (chunking + multi-format ingest)
 """
 
-from idp.core.document import Document, Page, Block
+from idp.core.document import Block, Document, Page
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
 __version__ = "0.1.0"

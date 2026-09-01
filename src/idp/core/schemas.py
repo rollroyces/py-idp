@@ -16,8 +16,6 @@ Users can supply their own Pydantic models; these are reference implementations.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -31,35 +29,35 @@ class LineItem(BaseModel):
 class Invoice(BaseModel):
     """Standard invoice extraction schema."""
 
-    invoice_number: Optional[str] = None
-    invoice_date: Optional[str] = None
-    due_date: Optional[str] = None
-    vendor_name: Optional[str] = None
-    vendor_address: Optional[str] = None
-    customer_name: Optional[str] = None
-    customer_address: Optional[str] = None
-    subtotal: Optional[float] = None
-    tax_amount: Optional[float] = None
-    total_amount: Optional[float] = None
-    currency: Optional[str] = None
+    invoice_number: str | None = None
+    invoice_date: str | None = None
+    due_date: str | None = None
+    vendor_name: str | None = None
+    vendor_address: str | None = None
+    customer_name: str | None = None
+    customer_address: str | None = None
+    subtotal: float | None = None
+    tax_amount: float | None = None
+    total_amount: float | None = None
+    currency: str | None = None
     line_items: list[LineItem] = Field(default_factory=list)
 
 
 class ContractParty(BaseModel):
     name: str
-    role: Optional[str] = None  # e.g., "Licensor", "Licensee"
+    role: str | None = None  # e.g., "Licensor", "Licensee"
 
 
 class Contract(BaseModel):
     """Basic contract extraction schema."""
 
-    title: Optional[str] = None
-    effective_date: Optional[str] = None
-    expiration_date: Optional[str] = None
+    title: str | None = None
+    effective_date: str | None = None
+    expiration_date: str | None = None
     parties: list[ContractParty] = Field(default_factory=list)
-    governing_law: Optional[str] = None
-    total_value: Optional[float] = None
-    currency: Optional[str] = None
+    governing_law: str | None = None
+    total_value: float | None = None
+    currency: str | None = None
     key_obligations: list[str] = Field(default_factory=list)
 
 
@@ -67,16 +65,16 @@ class BankTransaction(BaseModel):
     date: str
     description: str
     amount: float
-    balance: Optional[float] = None
+    balance: float | None = None
 
 
 class BankStatement(BaseModel):
-    account_holder: Optional[str] = None
-    account_number_last4: Optional[str] = None
-    statement_period_start: Optional[str] = None
-    statement_period_end: Optional[str] = None
-    opening_balance: Optional[float] = None
-    closing_balance: Optional[float] = None
+    account_holder: str | None = None
+    account_number_last4: str | None = None
+    statement_period_start: str | None = None
+    statement_period_end: str | None = None
+    opening_balance: float | None = None
+    closing_balance: float | None = None
     transactions: list[BankTransaction] = Field(default_factory=list)
 
 

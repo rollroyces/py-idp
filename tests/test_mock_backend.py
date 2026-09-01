@@ -1,7 +1,8 @@
 """Mock-backend schema-stub correctness. Catches the anyOf/allOf bug."""
 import json
-from idp.core.schemas import Invoice, Contract, BankStatement
-from idp.llm.backend import MockBackend, CompletionRequest, Message
+
+from idp.core.schemas import BankStatement, Contract, Invoice
+from idp.llm.backend import CompletionRequest, Message, MockBackend
 
 
 def _messages(schema):
@@ -9,7 +10,7 @@ def _messages(schema):
         Message("system", "x"),
         Message(
             "user",
-            f"Extract into the schema.\n\nOutput JSON Schema:\n"
+            "Extract into the schema.\n\nOutput JSON Schema:\n"
             + json.dumps(schema.model_json_schema(), indent=2)
             + "\n\nOutput rules: return JSON.",
         ),

@@ -26,7 +26,6 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 
@@ -210,7 +209,7 @@ class AnthropicBackend(Backend):
 
     def __init__(self, model: str = "claude-3-5-sonnet-latest", api_key: str | None = None):
         try:
-            import anthropic  # noqa: F401
+            import anthropic  # type: ignore[import-not-found]  # noqa: F401
         except ImportError as e:
             raise ImportError(
                 "Install the 'anthropic' extra: pip install py-idp[anthropic]"
@@ -223,7 +222,7 @@ class AnthropicBackend(Backend):
                 "in the constructor."
             )
         self.api_key = api_key
-        self._client = None
+        self._client: Any = None
 
     @property
     def is_multimodal(self) -> bool:
@@ -231,14 +230,19 @@ class AnthropicBackend(Backend):
         # are text-only. Default to vision for known-multimodal families;
         # conservatively False for legacy / unknown model names.
         m = self.model.lower()
-        if m.startswith("claude-3") or "claude-4" in m or "opus" in m or "sonnet" in m or "haiku-3" in m:
-            return True
-        return False
+        return (
+            m.startswith("claude-3")
+            or "claude-4" in m
+            or "opus" in m
+            or "sonnet" in m
+            or "haiku-3" in m
+        )
 
     def complete(self, req: CompletionRequest) -> str:
-        import anthropic
+        import anthropic  # type: ignore[import-not-found]
         if self._client is None:
             self._client = anthropic.Anthropic(api_key=self.api_key)
+        client = self._client
         # crude split: first message -> system, rest -> user chain
         system = next((m.content for m in req.messages if m.role == "system"), None)
         user_msgs = [
@@ -254,8 +258,8 @@ class AnthropicBackend(Backend):
         }
         if system:
             kwargs["system"] = system
-        resp = self._client.messages.create(**kwargs)
-        return resp.content[0].text
+        resp = client.messages.create(**kwargs)  # type: ignore[union-attr]
+        return resp.content[0].text  # type: ignore[union-attr]
 
 
 def _msg_to_anthropic(m: Message) -> Any:
@@ -438,13 +442,21 @@ def _stub(
 
     # 3. resolve anyOf/oneOf
     if "anyOf" in schema or "oneOf" in schema:
-        for branch in schema.get("anyOf") or schema.get("oneOf") or []:
+        branches = schema.get("anyOf") or schema.get("oneOf")
+        # Defensive: a malformed schema may have anyOf/oneOf as a
+        # non-list (e.g. a dict or a scalar). Treat non-lists as absent.
+        if not isinstance(branches, (list, tuple)):
+            branches = []
+        for branch in branches:
             if isinstance(branch, dict) and branch.get("type") != "null":
                 return _stub(branch, defs)
         return None
     if "allOf" in schema:
         merged: dict[str, Any] = {}
-        for branch in schema["allOf"]:
+        branches = schema["allOf"]
+        if not isinstance(branches, (list, tuple)):
+            branches = []
+        for branch in branches:
             if isinstance(branch, dict):
                 merged.update({k: v for k, v in branch.items() if k != "allOf"})
         return _stub(merged, defs)

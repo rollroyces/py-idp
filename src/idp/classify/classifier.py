@@ -57,7 +57,9 @@ def _rule_classify(doc: Document) -> tuple[str | None, float]:
         conf = min(0.55 + 0.15 * (score - 1), 0.99) if score >= 1 else 0.0
         # bump to 0.95 if the very first non-empty line starts with the label
         first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-        if first_line.startswith(best) or first_line.startswith(best.split("_")[0]):
+        if best is not None and (
+            first_line.startswith(best) or first_line.startswith(best.split("_")[0])
+        ):
             conf = max(conf, 0.95)
         return best, conf
     return None, 0.0

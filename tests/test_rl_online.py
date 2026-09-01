@@ -1,8 +1,6 @@
 """Tests for online RL policy cache (PolicyCache)."""
 from __future__ import annotations
 
-import time
-
 import pytest
 
 from idp.rl.online import PolicyCache

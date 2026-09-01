@@ -26,7 +26,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from idp.pipeline.pipeline import Pipeline, run_file, save_result
+from idp.pipeline.pipeline import run_file, save_result
 
 app = typer.Typer(help="py-idp: general-purpose AI-enabled IDP framework.")
 console = Console()
@@ -49,7 +49,7 @@ def run(
         result = run_file(path, schema=schema, backend=backend, parser=parser)
     except Exception as e:
         console.print(f"[red]pipeline failed:[/red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
     _print_result(result)
     if output:
         save_result(result, output)
@@ -140,12 +140,12 @@ def rl_update(
     if not storage and not reviews and not db_url:
         console.print("[red]error:[/red] must pass --storage, --reviews, or --db-url")
         raise typer.Exit(code=1)
+    from idp.rl.policy import PolicyConfig
     from idp.rl.update import (
         update_policy_from_reviews_file,
-        update_policy_from_storage,
         update_policy_from_sql,
+        update_policy_from_storage,
     )
-    from idp.rl.policy import PolicyConfig
 
     cur = PolicyConfig.load(current) if current else None
 
@@ -155,7 +155,8 @@ def rl_update(
         new_policy = update_policy_from_reviews_file(reviews, output, current=cur)
     else:
         # path-based: heuristic detects if it's a URL
-        if storage and ("://" in storage):
+        assert storage is not None  # guaranteed by the not-all-falsy guard above
+        if "://" in storage:
             new_policy = update_policy_from_sql(storage, output, current=cur)
         else:
             new_policy = update_policy_from_storage(storage, output, current=cur)

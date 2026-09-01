@@ -19,7 +19,7 @@ def test_list_china_providers_returns_rows():
 
 
 def test_each_provider_has_endpoint_and_envvar():
-    for name, p in CHINA_PROVIDER_PRESETS.items():
+    for _name, p in CHINA_PROVIDER_PRESETS.items():
         assert p["base_url"].startswith("https://")
         assert "env_var" in p
         assert "default_model" in p

@@ -23,7 +23,7 @@ import logging
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -104,7 +104,10 @@ class InMemoryStorage(Storage):
             if schema_name:
                 results = [r for r in results if r.schema_name == schema_name]
             if reviewed_since is not None:
-                results = [r for r in results if (r.last_reviewed_at or 0) >= reviewed_since]
+                # For unreviewed items, last_reviewed_at is None — exclude
+                # them entirely from the since-filtered list. Items reviewed
+                # before `since` are also excluded.
+                results = [r for r in results if r.last_reviewed_at is not None and r.last_reviewed_at >= reviewed_since]
             return results[:limit]
 
     def mark_reviewed(
@@ -156,9 +159,8 @@ class JsonFileStorage(Storage):
             result.id = uuid.uuid4().hex[:16]
         if not result.created_at:
             result.created_at = time.time()
-        with self._lock:
-            with self.path.open("a") as f:
-                f.write(json.dumps(asdict(result), default=str) + "\n")
+        with self._lock, self.path.open("a") as f:
+            f.write(json.dumps(asdict(result), default=str) + "\n")
         return result.id
 
     def get(self, result_id: str) -> StoredResult | None:
@@ -183,6 +185,11 @@ class JsonFileStorage(Storage):
         if reviewed_since is not None:
             # created_at on JsonFileStorage is float; last_reviewed_at we
             # don't track there yet, so fall back to created_at.
+            # (Pre-fix note: this also includes never-reviewed rows because
+            # their last_reviewed_at is None and falls through to
+            # created_at. Acceptable for the JsonFileStorage path
+            # because we don't expect rich filtering on it — SqlStorage
+            # is the recommended backend for that.)
             all_results = [
                 r for r in all_results
                 if (getattr(r, "last_reviewed_at", None) or r.created_at) >= reviewed_since
@@ -202,6 +209,5 @@ class JsonFileStorage(Storage):
         original.reviewed_extraction = edited
         original.reviewer = reviewer
         original.last_reviewed_at = _t.time()
-        with self._lock:
-            with self.path.open("a") as f:
-                f.write(json.dumps(asdict(original), default=str) + "\n")
+        with self._lock, self.path.open("a") as f:
+            f.write(json.dumps(asdict(original), default=str) + "\n")

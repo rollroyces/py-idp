@@ -71,7 +71,7 @@ def _schema_validator(schema_name: str):
 
 def run_dataset(dataset_dir, strategies: list[str]) -> dict[str, Any]:
     """Run each strategy against the dataset. Returns a metrics dict."""
-    from idp.eval.metrics import field_match, field_scores, schema_valid
+    from idp.eval.metrics import field_match, field_scores
 
     dataset_dir = Path(dataset_dir)
     cases = _load_cases(dataset_dir)

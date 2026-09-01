@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
-from idp.storage.store import InMemoryStorage, JsonFileStorage, Storage, StoredResult
+from idp.storage.store import InMemoryStorage, JsonFileStorage, Storage
 
 
 def make_storage(

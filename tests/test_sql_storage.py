@@ -6,14 +6,11 @@ that the dialect-dispatch logic routes correctly via mocks.
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 
 from idp.storage.factory import make_storage
-from idp.storage.store import InMemoryStorage, JsonFileStorage, StoredResult
 from idp.storage.sql import SqlStorage
+from idp.storage.store import InMemoryStorage, JsonFileStorage, StoredResult
 
 
 @pytest.fixture

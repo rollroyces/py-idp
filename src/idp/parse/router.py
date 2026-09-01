@@ -18,8 +18,6 @@ Empirical finding (arXiv 2509.04469 + 2510.15727, 2025):
 """
 from __future__ import annotations
 
-import re
-
 from idp.core.document import Document
 from idp.core.types import ExtractionMode
 

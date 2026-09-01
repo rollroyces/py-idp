@@ -26,7 +26,6 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from idp.core.document import Document
 from idp.storage.store import StoredResult
 
 log = logging.getLogger(__name__)

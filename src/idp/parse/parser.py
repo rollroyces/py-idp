@@ -32,6 +32,7 @@ Strategy:
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import Any, Protocol
@@ -58,7 +59,7 @@ class PlainTextParser:
         text = p.read_text(encoding="utf-8", errors="ignore")
         # Synthetic "pages" = chunks of ~3000 chars (LLM token windowing heuristic)
         chunk = 3000
-        pages = []
+        pages: list[dict[str, Any]] = []
         for i in range(0, len(text), chunk):
             seg = text[i : i + chunk]
             pages.append({"page": len(pages) + 1, "text": seg, "image_path": None})
@@ -119,7 +120,9 @@ class DoclingParser:
 
     def __init__(self):
         try:
-            from docling.document_converter import DocumentConverter
+            from docling.document_converter import (
+                DocumentConverter,  # type: ignore[import-not-found]
+            )
         except ImportError as e:
             raise ImportError(
                 "Install Docling: pip install py-idp[docling]"
@@ -127,7 +130,9 @@ class DoclingParser:
         self._converter = DocumentConverter()
 
     def parse(self, path: str | Path) -> dict[str, Any]:
-        from docling_core.types.doc.base import ImageRefMode  # noqa: F401  (probe import)
+        from docling_core.types.doc.base import (
+            ImageRefMode,  # type: ignore[import-not-found]  # noqa: F401
+        )
 
         result = self._converter.convert(str(path))
         doc = result.document
@@ -172,7 +177,7 @@ def get_parser(name: str = "auto") -> Parser:
     """Resolve a parser. 'auto' picks: docling > pdfplumber > plain."""
     if name == "auto":
         try:
-            import docling  # noqa: F401
+            import docling  # type: ignore[import-not-found]  # noqa: F401
 
             return DoclingParser()
         except ImportError:
@@ -238,11 +243,9 @@ def _auto_pick(doc: Document) -> Parser:
         except ImportError:
             return PdfPlumberParser()
     if ext in ("png", "jpg", "jpeg", "tiff", "tif", "bmp"):
-        # Raster images: no PDF parser will help — use plain (OCR is optional)
-        try:
-            import pytesseract  # noqa: F401
-            # OCR path would go here; for now route to plain stub
-        except ImportError:
-            pass
+        # Raster images: no PDF parser will help — use plain (OCR is optional).
+        # OCR path would go here; for now route to plain stub.
+        with contextlib.suppress(ImportError):
+            import pytesseract  # type: ignore[import-not-found]  # noqa: F401
     # Everything else (txt, md, html, eml, csv, no-ext, docx, xlsx, ...) -> plain
     return PlainTextParser()

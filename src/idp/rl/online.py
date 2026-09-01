@@ -21,17 +21,16 @@ processes just read policy.json from disk (existing behaviour, no change).
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import threading
-import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from idp.rl.policy import PolicyConfig, update_policy
-from idp.rl.reward import ReviewRewards, aggregate_rewards, derive_field_rewards
+from idp.rl.reward import ReviewRewards, derive_field_rewards
 from idp.storage.store import StoredResult
 
 log = logging.getLogger(__name__)
@@ -91,7 +90,7 @@ class PolicyCache:
             if stored is not None:
                 self.on_review(stored)
 
-        wrapped.__wrapped__ = original  # keep a handle for tests
+        wrapped.__wrapped__ = original  # type: ignore[attr-defined]  # keep a handle for tests
         storage.mark_reviewed = wrapped
         storage._policy_cache_attached = True
 
@@ -111,10 +110,8 @@ class PolicyCache:
         self._stop.set()
         self._flusher.join(timeout=5)
         # final flush on shutdown
-        try:
+        with contextlib.suppress(Exception):
             self.flush_now()
-        except Exception:  # noqa: BLE001
-            pass
 
     # ---- Internals ----
     def _flush_loop(self) -> None:

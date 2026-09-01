@@ -13,9 +13,9 @@
 """Example: extract a Contract using the mock backend."""
 from pathlib import Path
 
+from idp._util import pretty_print_result
 from idp.core.document import Document
 from idp.core.schemas import Contract
-from idp._util import pretty_print_result
 from idp.llm.backend import get_backend
 from idp.pipeline.pipeline import Pipeline
 from idp.validate.validator import required_fields_rule

@@ -19,7 +19,8 @@ Implements:
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 def _norm(v: Any) -> Any:
@@ -72,7 +73,7 @@ def field_scores(per_doc: list[dict[str, bool]]) -> dict[str, float]:
                 fn += 1
     # FP only counts extra keys the model emitted beyond the gold set
     for d in per_doc:
-        for k in d.keys() - keys:
+        for _k in d.keys() - keys:
             fp += 1
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     recall = tp / (tp + fn) if (tp + fn) else 0.0

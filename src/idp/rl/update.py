@@ -25,7 +25,7 @@ from pathlib import Path
 from idp.policy_config import PolicyConfig  # re-exported here
 from idp.rl.policy import update_policy
 from idp.rl.reward import ReviewRewards, aggregate_rewards, derive_field_rewards
-from idp.storage.store import JsonFileStorage, StoredResult
+from idp.storage.store import JsonFileStorage
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def update_policy_from_sql(
         )
         model = d.get("model") or {}
         human = d.get("human") or {}
-        from idp.rl.reward import _norm_for_compare, FieldReward
+        from idp.rl.reward import FieldReward, _norm_for_compare
 
         keys = set(model.keys()) | set(human.keys())
         for k in keys:

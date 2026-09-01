@@ -11,14 +11,12 @@ Covers:
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from idp.core.schemas import Invoice
+from idp.llm.backend import Backend, CompletionRequest
 from idp.pipeline.pipeline import Pipeline
-from idp.llm.backend import Backend, CompletionRequest, Message
 from idp.rl.policy import (
     PolicyConfig,
     policy_to_penalised_confidence,

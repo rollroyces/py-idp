@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
 
 def test_update_policy_from_sql_end_to_end(tmp_path):
     """Submit reviews to SqlStorage, then update policy via --db-url."""
-    from idp.rl.policy import PolicyConfig
     from idp.rl.update import update_policy_from_sql
     from idp.storage.sql import SqlStorage
     from idp.storage.store import StoredResult

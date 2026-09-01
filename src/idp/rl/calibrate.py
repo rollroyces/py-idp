@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -117,7 +117,7 @@ def synthetic_reviews_from_gold(
         keys = list(gold.keys())
         n_corrupt = max(1, round(len(keys) * injection_rate))
         corrupt_keys = set(rng.sample(keys, k=n_corrupt))
-        model = {}
+        model: dict[str, Any] = {}
         for k in keys:
             if k in corrupt_keys:
                 # perturb the value: empty string for strings, 0.0 for numbers
@@ -250,12 +250,10 @@ def evaluate_policy(
         flags = policy_to_review_flags({field_name: penalised}, policy)
         fires = flags[field_name]
 
-        # Q1: when policy fires (flag=true), was the human happy?
-        hits = sum(1 for r in reviews for k in [field_name]
-                   if k in (r.get("human") or {}) and
-                   _norm_for_compare((r.get("model") or {}).get(k)) != _norm_for_compare(r["human"].get(k)))
-        # This counts ALL corrections; we want only when the policy fires
-        # which depends on the same field across all reviews
+        # Q1: when policy fires (flag=true), every correction of this field is
+        # a hit and every accept is a false flag. n_corrected already counts
+        # the corrections, so use it directly (the per-review recount here was
+        # dead code removed in the lint pass).
         if fires:
             # all corrections count as hits (since we fired on every review
             # of this field). False flags = accepts.

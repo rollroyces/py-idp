@@ -77,7 +77,7 @@ class Document:
     errors: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_path(cls, path: str | Path) -> "Document":
+    def from_path(cls, path: str | Path) -> Document:
         p = Path(path)
         if not p.exists():
             raise FileNotFoundError(f"No such file: {path}")

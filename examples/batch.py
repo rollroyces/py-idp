@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from idp._util import pretty_print_result
 from idp.core.document import Document
 from idp.core.schemas import SCHEMA_REGISTRY
-from idp._util import pretty_print_result
 from idp.llm.backend import get_backend
 from idp.pipeline.pipeline import Pipeline, save_result
 

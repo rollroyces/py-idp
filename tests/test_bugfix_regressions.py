@@ -4,11 +4,10 @@ Each test corresponds to one bug in the audit list (B1-B14). If you
 regress one of these, the corresponding real-world failure mode returns.
 """
 import json
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
+
 from idp.core.document import Document
 from idp.core.schemas import Invoice
 from idp.eval.metrics import field_scores
@@ -19,10 +18,10 @@ from idp.llm.backend import (
     CompletionRequest,
     Message,
     MockBackend,
-    _safe_json,
     _extract_schema_block,
+    _safe_json,
 )
-from idp.storage.store import InMemoryStorage, JsonFileStorage, StoredResult
+from idp.storage.store import JsonFileStorage
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +186,8 @@ def test_b8_schema_block_handles_alternative_marker():
 # B11: field_scores: explicit FP/FN semantics for missing/extra keys
 # ---------------------------------------------------------------------------
 def test_b11_field_scores_missing_key_is_fn():
-    # Pred missing 'c' that was in gold
-    pred = {"a": 1.0, "b": 2.0}
-    gold = {"a": 1.0, "b": 2.0, "c": 3.0}
+    # Pred missing 'c' that was in gold -> the field-level match dict has
+    # 'c' as a miss (False). tp=2, fn=1.
     matches = {"a": True, "b": True, "c": False}
     s = field_scores([matches])
     # tp=2, fn=1 -> recall = 2/3
@@ -200,7 +198,6 @@ def test_b11_field_scores_missing_key_is_fn():
 def test_b11_field_scores_extra_predicted_field_is_fp():
     pred = {"a": 1.0, "b": 2.0, "extra": 99.0}
     gold = {"a": 1.0, "b": 2.0}
-    matches = {"a": True, "b": True}
     # Manually craft — extra would show as an FP in the inner loop
     from idp.eval.metrics import field_match
     actual_matches = field_match(pred, gold)
@@ -295,15 +292,14 @@ def test_b15_no_duplicate_top_level_imports():
     column-0 (top level). Function-scope lazy imports for optional deps
     are allowed (and intentional)."""
     import re
-    from pathlib import Path
     bad = []
     for f in Path("/Users/hermes/py-idp/src/idp").rglob("*.py"):
         text = f.read_text()
         # ONLY column-0 (top-level) imports — exclude indented function-scope
         top_imports = [
-            re.match(r"^import\s+(\w+)", l).group(1)
-            for l in text.splitlines()
-            if re.match(r"^import\s+(\w+)", l) is not None
+            re.match(r"^import\s+(\w+)", line).group(1)
+            for line in text.splitlines()
+            if re.match(r"^import\s+(\w+)", line) is not None
         ]
         from collections import Counter
         for mod, count in Counter(top_imports).items():
@@ -321,10 +317,10 @@ def test_b16_anthropic_backend_no_key_raises_helpful_oserror(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     # Stub `anthropic` into sys.modules so the SDK-import probe succeeds.
     # Then we exercise the "package installed, no key" path.
-    import sys, types
+    import sys
+    import types
     fake = types.ModuleType("anthropic")
     sys.modules["anthropic"] = fake
-    from idp.llm.backend import AnthropicBackend
     try:
         AnthropicBackend(api_key=None)
     except OSError as e:
@@ -340,10 +336,10 @@ def test_b16_anthropic_backend_no_key_raises_helpful_oserror(monkeypatch):
 def test_b16_anthropic_backend_explicit_key_works(monkeypatch):
     """With anthropic SDK present and explicit api_key, no env needed."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    import sys, types
+    import sys
+    import types
     fake = types.ModuleType("anthropic")
     sys.modules["anthropic"] = fake
-    from idp.llm.backend import AnthropicBackend
     try:
         b = AnthropicBackend(api_key="sk-test-fake")
         assert b.api_key == "sk-test-fake"
@@ -356,10 +352,10 @@ def test_b16_anthropic_backend_explicit_key_works(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_b25_anthropic_claude2_is_text_only(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    import sys, types
+    import sys
+    import types
     fake = types.ModuleType("anthropic")
     sys.modules["anthropic"] = fake
-    from idp.llm.backend import AnthropicBackend
     try:
         b = AnthropicBackend(api_key="sk-test", model="claude-2.1")
         assert b.is_multimodal is False
@@ -369,10 +365,10 @@ def test_b25_anthropic_claude2_is_text_only(monkeypatch):
 
 def test_b25_anthropic_claude35_is_multimodal(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    import sys, types
+    import sys
+    import types
     fake = types.ModuleType("anthropic")
     sys.modules["anthropic"] = fake
-    from idp.llm.backend import AnthropicBackend
     try:
         b = AnthropicBackend(api_key="sk-test", model="claude-3-5-sonnet-latest")
         assert b.is_multimodal is True

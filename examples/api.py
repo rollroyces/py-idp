@@ -26,7 +26,6 @@ Routes:
 """
 from __future__ import annotations
 
-import asyncio
 import os
 from pathlib import Path
 
@@ -37,8 +36,8 @@ from idp.auth.keys import require_api_key, verify
 from idp.core.document import Document
 from idp.core.schemas import SCHEMA_REGISTRY
 from idp.pipeline.pipeline import Pipeline
-from idp.queue.jobs import InProcessQueue, Job, JobStatus
-from idp.storage.store import InMemoryStorage, JsonFileStorage, StoredResult
+from idp.queue.jobs import InProcessQueue, Job
+from idp.storage.store import JsonFileStorage, StoredResult
 
 app = FastAPI(title="py-idp API", version="0.1.0")
 
@@ -106,8 +105,8 @@ class JobResponse(BaseModel):
     error: str | None = None
 
 
-@app.post("/extract", response_model=ExtractResponse, dependencies=[])
-async def extract_sync(file: UploadFile, req: ExtractRequest, _=Depends(auth)) -> ExtractResponse:
+@app.post("/extract", response_model=ExtractResponse, dependencies=[Depends(auth)])
+async def extract_sync(file: UploadFile, req: ExtractRequest) -> ExtractResponse:
     dst = _uploads / file.filename or "upload"
     dst.write_bytes(await file.read())
     pipeline = Pipeline(backend=req.backend, schema=req.schema_name)
@@ -124,24 +123,24 @@ async def extract_sync(file: UploadFile, req: ExtractRequest, _=Depends(auth)) -
     )
 
 
-@app.post("/jobs", response_model=JobResponse, dependencies=[])
-async def submit_job(file: UploadFile, req: ExtractRequest, _=Depends(auth)) -> JobResponse:
+@app.post("/jobs", response_model=JobResponse, dependencies=[Depends(auth)])
+async def submit_job(file: UploadFile, req: ExtractRequest) -> JobResponse:
     dst = _uploads / (file.filename or "upload")
     dst.write_bytes(await file.read())
     job = await queue.submit(str(dst), req.schema_name, req.backend)
     return JobResponse(id=job.id, status=job.status.value, error=job.error)
 
 
-@app.get("/jobs/{job_id}", response_model=JobResponse, dependencies=[])
-async def job_status(job_id: str, _=Depends(auth)) -> JobResponse:
+@app.get("/jobs/{job_id}", response_model=JobResponse, dependencies=[Depends(auth)])
+async def job_status(job_id: str) -> JobResponse:
     j = await queue.status(job_id)
     if j is None:
         raise HTTPException(status_code=404, detail="no such job")
     return JobResponse(id=j.id, status=j.status.value, result_id=j.result_id, error=j.error)
 
 
-@app.get("/results/{result_id}", dependencies=[])
-async def get_result(result_id: str, _=Depends(auth)) -> dict:
+@app.get("/results/{result_id}", dependencies=[Depends(auth)])
+async def get_result(result_id: str) -> dict:
     r = storage.get(result_id)
     if r is None:
         raise HTTPException(status_code=404, detail="no such result")
@@ -163,7 +162,7 @@ class ReviewRequest(BaseModel):
     reviewer: str
 
 
-@app.post("/results/{result_id}/review", dependencies=[])
-async def post_review(result_id: str, req: ReviewRequest, _=Depends(auth)) -> dict:
+@app.post("/results/{result_id}/review", dependencies=[Depends(auth)])
+async def post_review(result_id: str, req: ReviewRequest) -> dict:
     storage.mark_reviewed(result_id, req.edited, req.reviewer)
     return {"id": result_id, "reviewed": True}

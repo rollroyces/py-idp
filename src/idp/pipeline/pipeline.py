@@ -25,20 +25,23 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Type
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from idp.assess import assess_confidence
 from idp.classify import classify_document
 from idp.core.document import Document
-from idp.core.types import ExtractionMode
 from idp.extract import extract
 from idp.llm.backend import Backend, get_backend
 from idp.parse import choose_mode, parse_document
 from idp.parse.parser import get_parser
 from idp.validate import validate
 from idp.validate.validator import BusinessRule
+
+if TYPE_CHECKING:
+    from idp.parse.parser import Parser
+    from idp.rl.policy import PolicyConfig
 
 log = logging.getLogger(__name__)
 
@@ -83,11 +86,11 @@ class Pipeline:
     def __init__(
         self,
         backend: Backend | str = "auto",
-        schema: str | Type[BaseModel] = "Invoice",
+        schema: str | type[BaseModel] = "Invoice",
         parser: str | Parser | None = "auto",
         use_llm_confidence: bool = False,
         business_rules: list[BusinessRule] | None = None,
-        policy: "PolicyConfig | None" = None,
+        policy: PolicyConfig | None = None,
         policy_path: str | None = None,
     ):
         # resolve objects if the caller passed names
@@ -178,7 +181,7 @@ class Pipeline:
 
 def run_file(
     path: str | Path,
-    schema: str | Type[BaseModel] = "Invoice",
+    schema: str | type[BaseModel] = "Invoice",
     backend: str = "auto",
     parser: str = "auto",
 ) -> PipelineResult:

@@ -1,9 +1,6 @@
 """Tests for the rl.calibrate module (RL calibration eval)."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from idp.rl.calibrate import (

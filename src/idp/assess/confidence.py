@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from idp.core.document import Document
 from idp.llm.backend import Backend, CompletionRequest, Message
+
+if TYPE_CHECKING:
+    from idp.rl.policy import PolicyConfig
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +104,7 @@ def assess_confidence(
     doc: Document,
     backend: Backend | None = None,
     use_llm: bool = False,
-    policy: "PolicyConfig | None" = None,
+    policy: PolicyConfig | None = None,
 ) -> Document:
     """Attach doc.confidence (per-field dict of floats in 0..1).
 

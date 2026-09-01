@@ -20,12 +20,11 @@ Schema is bootstrapped on first connect from
 """
 from __future__ import annotations
 
+import builtins
 import json
 import logging
 import sqlite3
 import threading
-import time
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -171,10 +170,9 @@ class SqlStorage:
                 # Skip DO $$ / $$ in SQLite; skip the Postgres CREATE TYPE in SQLite
                 if dialect == "sqlite":
                     sql_text = _strip_postgres_only(sql_text)
-                if dialect == "postgres":
+                if dialect == "postgres" and path.name == "v001_initial_sqlite.sql":
                     # skip the SQLite-specific file (it has AUTOINCREMENT etc.)
-                    if path.name == "v001_initial_sqlite.sql":
-                        continue
+                    continue
                 # also skip the file if it's not the dialect-native one
                 if dialect == "sqlite" and path.name == "v001_initial.sql":
                     continue
@@ -273,11 +271,12 @@ class SqlStorage:
     def list(
         self,
         doc_id: str | None = None,
-        schema_name: str | None = None,
+        limit: int = 50,
+        *,
         reviewed_only: bool = False,
         reviewed_since: float | None = None,
-        limit: int = 50,
-    ) -> list[StoredResult]:
+        schema_name: str | None = None,
+    ) -> builtins.list[StoredResult]:
         with self._lock:
             conn, dialect = self._connect()
             try:
@@ -372,10 +371,7 @@ class SqlStorage:
                 for field_name in set(model_extraction.keys()) | set(edited.keys()):
                     m = model_extraction.get(field_name)
                     h = edited.get(field_name)
-                    if _field_equal(m, h):
-                        reward = 0
-                    else:
-                        reward = +1
+                    reward = 0 if _field_equal(m, h) else +1
                     if dialect == "sqlite":
                         conn.execute(
                             "INSERT INTO review_edits (review_id, field_name, model_value, human_value, reward) "
@@ -414,7 +410,7 @@ class SqlStorage:
         since: float | None = None,
         schema_name: str | None = None,
         limit: int = 10000,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Return reviews in the {doc_id, schema, model, human} shape the RL layer uses.
 
         Joins reviews + review_edits + stored_results + reviewers.

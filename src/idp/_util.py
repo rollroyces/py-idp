@@ -23,7 +23,7 @@ def pretty_print_result(result) -> None:
     print(f"backend:   {result.backend_name} ({result.mode})")
     print(f"classify:  {result.classification} (conf={result.document.classification_confidence})")
     print(f"validate:  {'PASS' if result.validation_passed else 'FAIL'}")
-    print(f"timings:   " + ", ".join(f"{t.name}={t.seconds:.3f}s" for t in result.timings))
+    print("timings:   " + ", ".join(f"{t.name}={t.seconds:.3f}s" for t in result.timings))
     print("\nextraction:")
     print(json.dumps(result.document.extraction, indent=2, default=str))
     if result.confidence:

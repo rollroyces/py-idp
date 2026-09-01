@@ -66,7 +66,7 @@ class PolicyConfig:
         Path(path).write_text(json.dumps(self.to_dict(), indent=2))
 
     @classmethod
-    def load(cls, path: str | Path) -> "PolicyConfig":
+    def load(cls, path: str | Path) -> PolicyConfig:
         d = json.loads(Path(path).read_text())
         return cls(**d)
 

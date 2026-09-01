@@ -25,7 +25,11 @@ jobs:
       - name: Lint
         run: |
           pip install ruff
-          ruff check src/ tests/ examples/ eval/
+          ruff check src/ tests/ examples/
+      - name: Type check
+        run: |
+          pip install mypy
+          mypy src/idp/
       - name: Test
         run: pytest -v
       - name: Eval smoke
