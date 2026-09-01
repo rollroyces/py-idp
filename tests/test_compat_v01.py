@@ -1,16 +1,16 @@
 """Tests for the v0.1 compatibility shim."""
 from __future__ import annotations
 
+import pytest
+
 from idp.compat_v01 import (
     BankStatement_v01,
     Contract_v01,
     Invoice_v01,
     register_compat_schemas,
 )
-from idp.core.schemas import SCHEMA_REGISTRY, BankStatement, Contract, Invoice
+from idp.core.schemas import SCHEMA_REGISTRY, Invoice
 from idp.validate.validator import validate
-
-import pytest
 
 
 def test_invoice_v01_accepts_empty_dict():
@@ -73,6 +73,7 @@ def test_v01_and_v02_diverge_on_partial_dict():
     inv_v01 = Invoice_v01.model_validate({"vendor_name": "Acme"})
     assert inv_v01.vendor_name == "Acme"
 
-    # v0.2: missing invoice_number, total_amount -> fails
-    with pytest.raises(Exception):
+    # v0.2: missing invoice_number, total_amount -> fails (ValidationError)
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
         Invoice.model_validate({"vendor_name": "Acme"})
