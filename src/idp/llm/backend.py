@@ -425,9 +425,14 @@ def _stub(
             return [_stub(x, defs) for x in schema[:1]]
         return None
 
-    # 1. enum first
-    if "enum" in schema and schema["enum"]:
-        return schema["enum"][0]
+    # 1. enum first — guard against malformed schemas where `enum` is not
+    #    a list (Hypothesis caught cases where it was a dict, set, bool, or
+    #    empty). Fall back to None on anything weird.
+    if "enum" in schema:
+        enum = schema["enum"]
+        if isinstance(enum, list) and enum:
+            return enum[0]
+        return None
 
     # 2. resolve $ref against the $defs registry
     if "$ref" in schema:

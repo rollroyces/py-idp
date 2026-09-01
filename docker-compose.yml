@@ -1,20 +1,52 @@
 services:
   idp-api:
     build: .
-    ports: ["8000:8000"]
+    image: py-idp:0.2.0
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
-      - IDP_API_KEY=${IDP_API_KEY:-}
+      # --- API auth ---
+      - IDP_API_KEY=${IDP_API_KEY:?IDP_API_KEY must be set}
+      - IDP_API_KEY_REQUIRED=true
+      - IDP_RATE_LIMIT_PER_MINUTE=${IDP_RATE_LIMIT_PER_MINUTE:-60}
+      # --- Storage ---
+      - IDP_STORAGE_BACKEND=${IDP_STORAGE_BACKEND:-sql}
+      - IDP_STORAGE_PATH=${IDP_STORAGE_PATH:-sqlite:////data/idp.db}
+      - IDP_UPLOAD_DIR=/data/uploads
+      # --- LLM ---
+      - IDP_BACKEND=${IDP_BACKEND:-mock}
+      - IDP_MODEL=${IDP_MODEL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # --- Observability ---
+      - IDP_LOG_LEVEL=${IDP_LOG_LEVEL:-INFO}
+      - IDP_LOG_FORMAT=${IDP_LOG_FORMAT:-human}
+      - IDP_METRICS_ENABLED=true
     volumes:
-      - idp_data:/data/idp
+      - idp_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   idp-ui:
     build: .
+    image: py-idp:0.2.0
+    restart: unless-stopped
     command: streamlit run src/idp/hitl/app.py --server.port 8501 --server.address 0.0.0.0
-    ports: ["8501:8501"]
-    depends_on: [idp-api]
+    ports:
+      - "8501:8501"
+    depends_on:
+      idp-api:
+        condition: service_healthy
     environment:
       - IDP_RESULTS=/data/idp/results.jsonl
+      - IDP_LOG_LEVEL=WARNING
+    volumes:
+      - idp_data:/data
 
 volumes:
   idp_data:
