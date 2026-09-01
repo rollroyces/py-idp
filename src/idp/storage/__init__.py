@@ -10,6 +10,13 @@
 # This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+from idp.storage.factory import make_storage
 from idp.storage.store import InMemoryStorage, JsonFileStorage, Storage, StoredResult
 
-__all__ = ["InMemoryStorage", "JsonFileStorage", "Storage", "StoredResult"]
+__all__ = [
+    "InMemoryStorage",
+    "JsonFileStorage",
+    "Storage",
+    "StoredResult",
+    "make_storage",
+]

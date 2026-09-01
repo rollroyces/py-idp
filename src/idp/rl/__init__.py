@@ -7,6 +7,7 @@ from idp.rl.calibrate import (
     load_reviews,
     synthetic_reviews_from_gold,
 )
+from idp.rl.online import PolicyCache
 from idp.rl.policy import (
     PolicyConfig,
     policy_to_penalised_confidence,
@@ -22,6 +23,7 @@ from idp.rl.reward import (
 )
 from idp.rl.update import (
     update_policy_from_reviews_file,
+    update_policy_from_sql,
     update_policy_from_storage,
 )
 
@@ -29,6 +31,7 @@ __all__ = [
     "CalibrationReport",
     "FieldEval",
     "FieldReward",
+    "PolicyCache",
     "PolicyConfig",
     "PolicyStats",
     "ReviewRewards",
@@ -42,5 +45,6 @@ __all__ = [
     "synthetic_reviews_from_gold",
     "update_policy",
     "update_policy_from_reviews_file",
+    "update_policy_from_sql",
     "update_policy_from_storage",
 ]

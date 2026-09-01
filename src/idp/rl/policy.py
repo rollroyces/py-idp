@@ -49,6 +49,10 @@ class PolicyConfig:
     base_confidence_floor: float = 0.6
     # when a field is high-failure, deduct this from the heuristic base.
     high_failure_penalty: float = 0.20
+    # minimum total reviews per field before any floor/penalty kicks in.
+    # below this threshold, fail-rate estimates have too much variance for
+    # the binary floor ON/OFF rule. Set higher = more conservative.
+    min_reviews: int = 10
 
     # per-field overrides (set by update_policy).
     field_floors: dict[str, float] = field(default_factory=dict)
@@ -72,14 +76,16 @@ def update_policy(stats: PolicyStats, current: PolicyConfig | None = None) -> Po
 
     Honest about what gets set:
       - `field_floors[field] = high_failure_confidence_floor` if the field's
-        observed fail_rate >= high_failure_threshold.
+        observed fail_rate >= high_failure_threshold AND the field has at
+        least `min_reviews` total observations.
       - `field_penalties[field] = high_failure_penalty` for the same fields.
 
     Fields NOT in the high-failure set use the base config values
     (which means "no override").
 
-    Conservative defaults: high_failure_threshold=0.30, so we only
-    override behaviour for fields the user has corrected >=30% of the time.
+    Conservative defaults: high_failure_threshold=0.30, min_reviews=10,
+    so we only override behaviour for fields the user has corrected
+    >=30% of the time across at least 10 observations.
     """
     current = current or PolicyConfig()
     new_floors = dict(current.field_floors)
@@ -89,6 +95,11 @@ def update_policy(stats: PolicyStats, current: PolicyConfig | None = None) -> Po
         n_corrected = counts.get("+1", 0)
         n_total = n_corrected + counts.get("0", 0)
         if n_total == 0:
+            continue
+        # GUARD: small-sample fields get no override. With n=1..9,
+        # a single correction puts fail_rate at 100% or 0%; below 10
+        # observations the variance is too high to commit a floor.
+        if n_total < current.min_reviews:
             continue
         fail_rate = n_corrected / n_total
         if fail_rate >= current.high_failure_threshold:
@@ -105,6 +116,7 @@ def update_policy(stats: PolicyStats, current: PolicyConfig | None = None) -> Po
         high_failure_confidence_floor=current.high_failure_confidence_floor,
         base_confidence_floor=current.base_confidence_floor,
         high_failure_penalty=current.high_failure_penalty,
+        min_reviews=current.min_reviews,
         field_floors=new_floors,
         field_penalties=new_penalties,
     )

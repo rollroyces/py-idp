@@ -48,12 +48,21 @@ class StoredResult:
     reviewed: bool = False
     reviewed_extraction: dict[str, Any] | None = None
     reviewer: str | None = None
+    last_reviewed_at: float | None = None  # epoch seconds, set by mark_reviewed/submit_review
 
 
 class Storage(Protocol):
     def put(self, result: StoredResult) -> str: ...
     def get(self, result_id: str) -> StoredResult | None: ...
-    def list(self, doc_id: str | None = None, limit: int = 50) -> list[StoredResult]: ...
+    def list(
+        self,
+        doc_id: str | None = None,
+        limit: int = 50,
+        *,
+        reviewed_only: bool = False,
+        reviewed_since: float | None = None,
+        schema_name: str | None = None,
+    ) -> list[StoredResult]: ...
     def mark_reviewed(
         self, result_id: str, edited: dict[str, Any], reviewer: str
     ) -> None: ...
@@ -77,11 +86,25 @@ class InMemoryStorage(Storage):
         with self._lock:
             return self._by_id.get(result_id)
 
-    def list(self, doc_id: str | None = None, limit: int = 50) -> list[StoredResult]:
+    def list(
+        self,
+        doc_id: str | None = None,
+        limit: int = 50,
+        *,
+        reviewed_only: bool = False,
+        reviewed_since: float | None = None,
+        schema_name: str | None = None,
+    ) -> list[StoredResult]:
         with self._lock:
             results = sorted(self._by_id.values(), key=lambda r: -r.created_at)
             if doc_id:
                 results = [r for r in results if r.doc_id == doc_id]
+            if reviewed_only:
+                results = [r for r in results if r.reviewed]
+            if schema_name:
+                results = [r for r in results if r.schema_name == schema_name]
+            if reviewed_since is not None:
+                results = [r for r in results if (r.last_reviewed_at or 0) >= reviewed_since]
             return results[:limit]
 
     def mark_reviewed(
@@ -141,10 +164,29 @@ class JsonFileStorage(Storage):
     def get(self, result_id: str) -> StoredResult | None:
         return self._read_all().get(result_id)
 
-    def list(self, doc_id: str | None = None, limit: int = 50) -> list[StoredResult]:
+    def list(
+        self,
+        doc_id: str | None = None,
+        limit: int = 50,
+        *,
+        reviewed_only: bool = False,
+        reviewed_since: float | None = None,
+        schema_name: str | None = None,
+    ) -> list[StoredResult]:
         all_results = sorted(self._read_all().values(), key=lambda r: -r.created_at)
         if doc_id:
             all_results = [r for r in all_results if r.doc_id == doc_id]
+        if reviewed_only:
+            all_results = [r for r in all_results if r.reviewed]
+        if schema_name:
+            all_results = [r for r in all_results if r.schema_name == schema_name]
+        if reviewed_since is not None:
+            # created_at on JsonFileStorage is float; last_reviewed_at we
+            # don't track there yet, so fall back to created_at.
+            all_results = [
+                r for r in all_results
+                if (getattr(r, "last_reviewed_at", None) or r.created_at) >= reviewed_since
+            ]
         return all_results[:limit]
 
     def mark_reviewed(
@@ -155,9 +197,11 @@ class JsonFileStorage(Storage):
         original = self.get(result_id)
         if original is None:
             return
+        import time as _t
         original.reviewed = True
         original.reviewed_extraction = edited
         original.reviewer = reviewer
+        original.last_reviewed_at = _t.time()
         with self._lock:
             with self.path.open("a") as f:
                 f.write(json.dumps(asdict(original), default=str) + "\n")

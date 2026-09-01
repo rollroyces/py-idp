@@ -201,14 +201,19 @@ def test_policy_round_trip_json(tmp_path):
 # ---------------------------------------------------------------------------
 def test_end_to_end_policy_in_pipeline(tmp_path):
     reviews_file = tmp_path / "reviews.jsonl"
-    reviews_file.write_text(
-        '{"doc_id":"x","schema":"Invoice",'
-        '"model":{"vendor_name":"Acme","total":100.0},'
-        '"human":{"vendor_name":"Acme Widgets Ltd.","total":100.0}}\n'
-    )
+    # Need >= 10 reviews since PolicyConfig.min_reviews defaults to 10;
+    # the heuristic guards against small-sample overrides.
+    lines = []
+    for i in range(12):
+        lines.append(
+            f'{{"doc_id":"x{i}","schema":"Invoice",'
+            f'"model":{{"vendor_name":"Acme","total":100.0}},'
+            f'"human":{{"vendor_name":"Acme Widgets Ltd.","total":100.0}}}}'
+        )
+    reviews_file.write_text("\n".join(lines) + "\n")
     policy_file = tmp_path / "policy.json"
     new_policy = update_policy_from_reviews_file(str(reviews_file), str(policy_file))
-    # 1 review, 100% fail rate -> vendor_name should be marked
+    # 12/12 vendor_name wrong -> 100% fail rate -> override (above min_reviews=10)
     assert "vendor_name" in new_policy.field_floors
 
     # Use the policy in a real pipeline run via canned backend

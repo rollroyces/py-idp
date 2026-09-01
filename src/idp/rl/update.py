@@ -83,3 +83,42 @@ def update_policy_from_reviews_file(
     new_policy = update_policy(stats, current=current)
     new_policy.save(output_path)
     return new_policy
+
+
+def update_policy_from_sql(
+    db_url: str,
+    output_path: str | Path,
+    current: PolicyConfig | None = None,
+) -> PolicyConfig:
+    """Read reviews from a SQL storage backend (sqlite or postgres) and update policy.
+
+    Requires SqlStorage (idp.storage.sql). Import is lazy to avoid forcing
+    psycopg as a dependency.
+    """
+    from idp.storage.sql import SqlStorage
+
+    storage = SqlStorage(db_url)
+    review_dicts = storage.reviews_as_dicts()
+    reviews: list[ReviewRewards] = []
+    for d in review_dicts:
+        rewards = ReviewRewards(
+            doc_id=d.get("doc_id", "?"),
+            schema_name=d.get("schema", "?"),
+        )
+        model = d.get("model") or {}
+        human = d.get("human") or {}
+        from idp.rl.reward import _norm_for_compare, FieldReward
+
+        keys = set(model.keys()) | set(human.keys())
+        for k in keys:
+            mv = model.get(k)
+            hv = human.get(k)
+            if _norm_for_compare(mv) == _norm_for_compare(hv):
+                rewards.field_rewards.append(FieldReward(k, 0, mv, hv))
+            else:
+                rewards.field_rewards.append(FieldReward(k, +1, mv, hv))
+        reviews.append(rewards)
+    stats = aggregate_rewards(reviews)
+    new_policy = update_policy(stats, current=current)
+    new_policy.save(output_path)
+    return new_policy

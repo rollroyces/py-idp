@@ -121,8 +121,9 @@ def eval(
 
 @app.command(name="rl-update")
 def rl_update(
-    storage: str | None = typer.Option(None, "--storage", help="Path to JsonFileStorage results.jsonl"),
+    storage: str | None = typer.Option(None, "--storage", help="Path to JsonFileStorage results.jsonl OR sql URL"),
     reviews: str | None = typer.Option(None, "--reviews", help="Path to hand-crafted reviews JSONL"),
+    db_url: str | None = typer.Option(None, "--db-url", help="SQL URL (env: IDP_DB_URL); read reviews from this DB"),
     output: str = typer.Option(..., "--output", "-o", help="Where to write policy.json"),
     current: str | None = typer.Option(None, "--current", help="Optional existing policy.json to update incrementally"),
 ):
@@ -136,17 +137,28 @@ def rl_update(
     NOT a learned reward model or fine-tuned LLM. The point is to route the
     fields humans keep correcting into HITL more reliably.
     """
-    if not storage and not reviews:
-        console.print("[red]error:[/red] must pass --storage or --reviews")
+    if not storage and not reviews and not db_url:
+        console.print("[red]error:[/red] must pass --storage, --reviews, or --db-url")
         raise typer.Exit(code=1)
-    from idp.rl.update import update_policy_from_reviews_file, update_policy_from_storage
+    from idp.rl.update import (
+        update_policy_from_reviews_file,
+        update_policy_from_storage,
+        update_policy_from_sql,
+    )
     from idp.rl.policy import PolicyConfig
 
     cur = PolicyConfig.load(current) if current else None
-    if storage:
-        new_policy = update_policy_from_storage(storage, output, current=cur)
-    else:
+
+    if db_url:
+        new_policy = update_policy_from_sql(db_url, output, current=cur)
+    elif reviews:
         new_policy = update_policy_from_reviews_file(reviews, output, current=cur)
+    else:
+        # path-based: heuristic detects if it's a URL
+        if storage and ("://" in storage):
+            new_policy = update_policy_from_sql(storage, output, current=cur)
+        else:
+            new_policy = update_policy_from_storage(storage, output, current=cur)
 
     table = Table(title=f"Updated policy → {output}")
     table.add_column("field", style="cyan")

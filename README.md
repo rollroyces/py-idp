@@ -208,7 +208,7 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | HTTP API | `examples/api.py` (FastAPI) | your own service |
 | HITL UI | `idp.hitl.app` (Streamlit) | React / FastAPI |
 | Docker | `Dockerfile`, `docker-compose.yml` | your infra |
-| **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (v0.2) |
+| **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (`PolicyCache`) |
 
 ### Not in 0.1 (deliberately)
 
@@ -271,6 +271,42 @@ Reports **hit rate when policy fires** (did humans correct what we flagged?) and
 | model was right, not flagged | 4 | correct accepts — model was actually right |
 
 **Honest call-out:** with `qwen2.5:0.5b` specifically, the base confidence heuristic is so pessimistic that almost every error was already escaping HITL — so the policy's gain looks dramatic. A larger model with cleaner confidence calibration would benefit less. The honest sample size here is 27 (field, doc) pairs; do not extrapolate beyond this.
+
+### Online policy update (per-review, in-process)
+
+The `PolicyCache` watches `storage.mark_reviewed()` and incrementally folds each new review into the in-memory policy, with debounced atomic disk flushes. The very next `Pipeline.run()` sees the updated override — no restart, no separate CLI invocation.
+
+```python
+from idp.storage import make_storage
+from idp.rl import PolicyCache
+
+storage = make_storage("sql", db_url="sqlite:///./idp.db")
+cache = PolicyCache(policy_path="policy.json", flush_interval_sec=1.0)
+cache.attach_to_storage(storage)   # patches mark_reviewed to fire on_review
+
+# From now on, every human review edits the policy in the background.
+```
+
+**Defaults:** `flush_interval_sec=1.0` (debounce window), `min_reviews=10` (the small-sample guard — fields with fewer than 10 total observations get no override regardless of fail rate, because fail_rate estimates are too noisy at n<10).
+
+**Multi-process:** only one process should hold the cache (e.g. the FastAPI server). Other processes (CLI tools, the Streamlit reviewer UI) read `policy.json` from disk. The cache uses `os.replace` for atomic writes, so a crash mid-flush leaves the previous policy intact.
+
+### Real HITL data collection
+
+The `SqlStorage` backend persists everything `JsonFileStorage` does plus per-field edit history in a real relational database. SQLite works out-of-the-box (zero extra deps); Postgres is opt-in via `pip install py-idp[sql]`.
+
+```bash
+# SQLite, single-file
+export IDP_DB_URL="sqlite:///./idp.db"
+idp serve                                  # Streamlit UI now reads/writes this DB
+idp rl-update --db-url "sqlite:///./idp.db" --output policy.json
+idp rl-eval  --db-url "sqlite:///./idp.db" --policy policy.json \
+             --output calibration.json
+```
+
+**Schema (4 tables):** `reviewers`, `stored_results` (denormalised cache of latest review state), `reviews` (one row per review session), `review_edits` (one row per field-level diff). The split lets you compute per-reviewer agreement, per-field edit rate over time, and "did the policy flag this and the human agreed it was wrong" without scanning full result blobs.
+
+**Why the split matters:** `review_edits` is the granular signal the RL layer consumes (one row per corrected field). Without it, you can't tell *which field* in a multi-field review the human changed.
 
 ---
 
