@@ -311,12 +311,29 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
     if name == "auto":
         name = os.environ.get("IDP_BACKEND", "auto")
     if name == "auto":
+        # Priority order:
+        #   1. Explicitly configured via env var (handled above)
+        #   2. anthropic (if ANTHROPIC_API_KEY set)
+        #   3. openai (if OPENAI_API_KEY set)
+        #   4. ollama (if running locally)
+        #   5. mock (last resort: no API key, no ollama — must work offline)
+        #
+        # The mock fallback ensures first-time users can run the pipeline
+        # without any API keys. To force a real backend, set IDP_BACKEND
+        # explicitly or the matching *_API_KEY env var.
         if os.environ.get("ANTHROPIC_API_KEY"):
             name = "anthropic"
         elif os.environ.get("OPENAI_API_KEY"):
             name = "openai"
-        else:
+        elif os.environ.get("OLLAMA_HOST") or os.environ.get("IDP_OLLAMA"):
             name = "ollama"
+        else:
+            name = "mock"
+            import logging
+            logging.getLogger("idp.llm.backend").info(
+                "no LLM credentials found; falling back to 'mock' backend. "
+                "Set IDP_BACKEND=openai|anthropic|ollama|... to use a real LLM."
+            )
     # Mock variants
     if name in ("mock", "mock-ideal", "mock-random", "mock-omits"):
         mode = name.split("-", 1)[1] if "-" in name else "ideal"

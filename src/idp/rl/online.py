@@ -145,6 +145,7 @@ class PolicyCache:
 
     def _load_from_disk(self) -> PolicyConfig:
         if not self.policy_path.exists():
+            # First run: no file yet. Silent — this is normal startup.
             return PolicyConfig(min_reviews=self.min_reviews)
         try:
             d = json.loads(self.policy_path.read_text())
@@ -152,7 +153,18 @@ class PolicyCache:
             # Don't overwrite min_reviews if it was persisted. The user
             # can override it on the new cache via the kwarg if they want.
             return p
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            # The file exists but is corrupt or invalid. This is NOT normal;
+            # surface it loudly so operators notice.
+            log.error(
+                "policy file at %s is corrupt or invalid (%s); "
+                "falling back to defaults and leaving the file in place. "
+                "Inspect / delete the file manually if needed.",
+                self.policy_path, e,
+            )
+            return PolicyConfig(min_reviews=self.min_reviews)
         except Exception as e:  # noqa: BLE001
+            # Truly unexpected error (permissions, etc.). Log at warning.
             log.warning("failed to load policy from %s: %s; using defaults", self.policy_path, e)
             return PolicyConfig(min_reviews=self.min_reviews)
 

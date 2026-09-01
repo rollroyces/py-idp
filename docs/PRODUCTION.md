@@ -3,8 +3,8 @@
 This document describes how to run py-idp in a production environment.
 It assumes you're comfortable with Docker, Linux, and basic ops.
 
-> For local development and quick demos, the README + `examples/api.py`
-> are still the right starting points.
+> For local development and quick demos, the README + `idp.api:app`
+> (run via `idp serve` or `uvicorn idp.api:app`) are the right starting points.
 
 ## 1. Container build
 

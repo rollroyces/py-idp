@@ -146,3 +146,16 @@ def policy_to_penalised_confidence(
         penalty = policy.field_penalties.get(field_name, 0.0)
         out[field_name] = max(0.0, min(1.0, conf - penalty))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatible re-exports
+# ---------------------------------------------------------------------------
+# The "from-X-input" policy updaters live in ``idp.rl.update`` for code-
+# organisation reasons, but historically users have imported them from
+# ``idp.rl.policy`` too. Re-exporting here preserves that symmetry.
+from idp.rl.update import (  # noqa: E402, F401
+    update_policy_from_reviews_file,
+    update_policy_from_sql,
+    update_policy_from_storage,
+)

@@ -7,8 +7,8 @@
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-51_passing-brightgreen.svg)](#development)
-[![Version](https://img.shields.io/badge/version-0.1.0-lightgrey.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-263_passing-brightgreen.svg)](#development)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](#)
 
 ---
 
@@ -19,7 +19,7 @@ pip install py-idp                # core (pydantic + typer + rich + httpx + pdfp
 pip install py-idp[docling]      # IBM Docling — best PDF table extraction
 pip install py-idp[openai]       # OpenAI SDK (also used for 8 China LLMs)
 pip install py-idp[anthropic]    # Anthropic SDK
-pip install py-idp[api]           # FastAPI server (examples/api.py)
+pip install py-idp[api]           # FastAPI server (idp.api:app — production-ready)
 pip install py-idp[dev]          # pytest + ruff + mypy
 ```
 
@@ -205,7 +205,7 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | Async job queue | `idp.queue.InProcessQueue` | ARQ / Celery / SQS |
 | Persistent storage | `idp.storage.JsonFileStorage` | Postgres + S3 |
 | API key auth | `idp.auth.keys` | wire into FastAPI dep |
-| HTTP API | `examples/api.py` (FastAPI) | your own service |
+| HTTP API | `idp.api:app` (production, FastAPI, auth+rate-limit+metrics) | your own service |
 | HITL UI | `idp.hitl.app` (Streamlit) | React / FastAPI |
 | Docker | `Dockerfile`, `docker-compose.yml` | your infra |
 | **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (`PolicyCache`) |
@@ -248,7 +248,7 @@ idp rl-update --reviews reviews.jsonl --output policy.json
 | `subtotal` | 0.10 (already flagged) | **0.0** (urgent) | −0.10 |
 | `invoice_number` | 0.75 | 0.75 (no override) | 0.0 |
 
-Online (per-review) update ships as a v0.2 hook; the offline batch is fully wired today.
+Online (per-review) update ships in v0.2 via `PolicyCache`; the offline batch is fully wired today.
 
 ### Calibration eval — does the policy actually do what it claims?
 
@@ -318,13 +318,13 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 51 tests, no API key needed
+pytest -v                       # 263 tests, no API key needed
 ruff check src tests examples   # lint
 
 python -m examples.invoice      # end-to-end demo (no API key needed)
 ```
 
-`import idp; idp.__version__` → `0.1.0`.
+`import idp; idp.__version__` → `0.2.0`.
 
 ---
 

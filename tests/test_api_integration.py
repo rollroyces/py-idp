@@ -76,6 +76,34 @@ def test_metrics_increments_on_request(client):
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
+@pytest.fixture
+def no_auth_client(tmp_path, monkeypatch):
+    """Build a TestClient with API key auth DISABLED."""
+    monkeypatch.setenv("IDP_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("IDP_API_KEY", "")
+    monkeypatch.setenv("IDP_API_KEY_REQUIRED", "false")
+    monkeypatch.setenv("IDP_RATE_LIMIT_PER_MINUTE", "100")
+    monkeypatch.setenv("IDP_MAX_UPLOAD_BYTES", str(1024 * 1024))
+    monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
+    from fastapi.testclient import TestClient
+
+    from idp.api import app
+    with TestClient(app) as c:
+        yield c
+
+
+def test_extract_returns_correct_field_names(no_auth_client):
+    """The ExtractResponse must use 'backend_name' (matches PipelineResult)."""
+    files = {"file": ("x.txt", b"hi")}
+    r = no_auth_client.post("/extract", files=files, data={"schema_name": "Invoice"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "backend_name" in body, f"missing backend_name in {list(body.keys())}"
+    assert "backend" not in body, "old 'backend' key should be removed"
+    assert body["backend_name"] in ("mock", "mock-ideal", "mock-random", "mock-omits")
+    assert body["schema_name"] == "Invoice"
+
+
 def test_extract_requires_api_key(client):
     r = client.post("/extract", files={"file": ("x.txt", b"hello")},
                     data={"schema_name": "Invoice"})

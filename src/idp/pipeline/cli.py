@@ -175,18 +175,30 @@ def rl_update(
 
 @app.command(name="rl-eval")
 def rl_eval(
-    reviews: str | None = typer.Option(None, "--reviews", help="Real reviews JSONL (set if NOT using --synthetic)"),
+    reviews: str | None = typer.Option(None, "--reviews", help="Real reviews JSONL"),
     policy: str = typer.Option(..., "--policy", help="policy.json to evaluate"),
-    fixtures: str | None = typer.Option(None, "--fixtures", help="Eval dataset dir for --synthetic mode"),
-    synthetic_injection_rate: float = typer.Option(0.30, "--injection-rate", help="Fraction of fields to corrupt when --synthetic"),
+    fixtures: str | None = typer.Option(
+        None, "--fixtures",
+        help="Eval dataset dir (implies --synthetic mode: reviews are generated from gold truth)"
+    ),
+    synthetic: bool = typer.Option(
+        False, "--synthetic",
+        help="Force synthetic mode even when --reviews is provided (useful for smoke-testing the synthetic pipeline)"
+    ),
+    synthetic_injection_rate: float = typer.Option(0.30, "--injection-rate", help="Fraction of fields to corrupt in --synthetic mode"),
     output: str | None = typer.Option(None, "--output", "-o"),
 ):
     """Evaluate whether the policy actually does what it claims.
 
-    Honest about scope: --synthetic mode generates biased-optimistic
-    reviews from gold truth (the gold truth IS what the human corrected
-    TO, so correction signals are artificially clean). Real HITL data
-    is what makes these numbers trustworthy.
+    Modes:
+      - Real reviews:    pass --reviews path/to/reviews.jsonl
+      - Synthetic reviews: pass --fixtures path/to/dataset (auto-detected) or --synthetic
+      - Both --fixtures and --synthetic: synthetic wins (clearest intent)
+
+    Honest about scope: --synthetic generates biased-optimistic reviews from
+    gold truth (the gold truth IS what the human corrected TO, so correction
+    signals are artificially clean). Real HITL data is what makes these
+    numbers trustworthy.
 
     Reports:
       - hit rate when policy fires (was the flagged field actually corrected?)
@@ -203,26 +215,29 @@ def rl_eval(
 
     pol = PolicyConfig.load(policy)
 
-    if reviews:
+    if reviews and not fixtures and not synthetic:
         revs = load_reviews(reviews)
-        synthetic = False
+        synthetic_mode = False
         notes_extra = "Real reviews (synthetic=false)."
-    elif fixtures:
+    elif synthetic or fixtures:
+        if fixtures is None:
+            console.print("[red]error:[/red] --synthetic requires --fixtures <dataset_dir>")
+            raise typer.Exit(code=1)
         revs, _ = synthetic_reviews_from_gold(
             fixtures, injection_rate=synthetic_injection_rate, seed=0,
         )
-        synthetic = True
+        synthetic_mode = True
         notes_extra = "SYNTHETIC reviews from gold truth."
     else:
         console.print("[red]error:[/red] pass --reviews or --fixtures (with --synthetic)")
         raise typer.Exit(code=1)
 
-    report = evaluate_policy(revs, pol, synthetic=synthetic)
+    report = evaluate_policy(revs, pol, synthetic=synthetic_mode)
     report.policy_path = policy
     report.notes.append(notes_extra)
 
     # Print table
-    table = Table(title=f"RL calibration — {len(revs)} reviews ({'SYNTHETIC' if synthetic else 'REAL'})")
+    table = Table(title=f"RL calibration — {len(revs)} reviews ({'SYNTHETIC' if synthetic_mode else 'REAL'})")
     table.add_column("field", style="cyan")
     table.add_column("n", justify="right")
     table.add_column("corrected_rate", style="yellow", justify="right")

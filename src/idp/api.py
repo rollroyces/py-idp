@@ -54,7 +54,7 @@ class ExtractRequest(BaseModel):
 
 class ExtractResponse(BaseModel):
     schema_name: str | None = None
-    backend: str
+    backend_name: str
     mode: str
     classification: str | None
     extraction: dict[str, Any]
@@ -233,7 +233,7 @@ async def extract_sync(
     metrics.inc("extractions", 1, backend=res.backend_name, schema=res.schema_name or "_none")
     return ExtractResponse(
         schema_name=res.schema_name,
-        backend=res.backend_name,
+        backend_name=res.backend_name,
         mode=res.mode or "ocr_llm",  # type: ignore[arg-type]  # router sets this; defensive against no-LLM paths
         classification=res.classification,
         extraction=res.document.extraction or {},
