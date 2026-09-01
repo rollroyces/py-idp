@@ -36,7 +36,12 @@ def test_bench_parse_document(benchmark):
 def test_bench_assess_confidence(benchmark):
     doc = Document.from_path(str(SAMPLE))
     doc.mode = "ocr_llm"
-    doc.extraction = Invoice.model_validate({}).model_dump()
+    # Use a minimal valid Invoice (required fields only)
+    doc.extraction = {
+        "invoice_number": "INV-1",
+        "vendor_name": "Acme",
+        "total_amount": 540.0,
+    }
     result = benchmark(lambda: assess_confidence(doc))
     assert result.confidence
 

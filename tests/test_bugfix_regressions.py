@@ -409,6 +409,9 @@ def test_b24_extract_empty_text_skips_llm(tmp_path):
     assert any("empty document" in e or "extract_skipped" in e for e in doc.errors), (
         f"expected skip marker in doc.errors; got {doc.errors}"
     )
-    # extraction is a valid Invoice-shaped dict of nulls
-    parsed = Invoice.model_validate(doc.extraction)
-    assert parsed.invoice_number is None
+    # When the LLM is skipped, extraction holds an `_raw` marker (not a real
+    # extraction). Callers can branch on `_raw in extraction` to detect the
+    # skip path without calling a real LLM.
+    assert isinstance(doc.extraction, dict) and "_raw" in doc.extraction, (
+        f"expected skip-marker extraction, got {doc.extraction!r}"
+    )

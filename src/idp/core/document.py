@@ -81,6 +81,15 @@ class Document:
         p = Path(path)
         if not p.exists():
             raise FileNotFoundError(f"No such file: {path}")
+        if p.is_dir():
+            # Reject directories instead of producing a silent empty document.
+            # Callers that batch a list of paths would otherwise get 0 results
+            # with no error to debug.
+            raise IsADirectoryError(
+                f"from_path() expects a file, got a directory: {path}"
+            )
+        if not p.is_file():
+            raise OSError(f"Not a regular file: {path}")
         mt, _ = mimetypes.guess_type(str(p))
         h = hashlib.sha1(str(p.resolve()).encode()).hexdigest()[:16]
         return cls(

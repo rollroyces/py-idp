@@ -174,7 +174,12 @@ def test_validate_no_rules_arg_uses_none():
     """validate() with no rules argument defaults to an empty rule list."""
     class _Doc:
         extraction_schema = "Invoice"
-        extraction = {"invoice_number": "INV-1"}
+        # All required fields present so schema_valid is True.
+        extraction = {
+            "invoice_number": "INV-1",
+            "vendor_name": "Acme",
+            "total_amount": 100.0,
+        }
 
     d = _Doc()
     validate(d)  # rules defaults to None

@@ -27,18 +27,26 @@ class LineItem(BaseModel):
 
 
 class Invoice(BaseModel):
-    """Standard invoice extraction schema."""
+    """Standard invoice extraction schema.
 
-    invoice_number: str | None = None
+    Minimal required fields chosen from real-world IDP requirements:
+    an invoice that lacks an ID, vendor identity, or a total isn't an
+    invoice we can route or pay. Everything else is optional because
+    partial extractions from weaker LLMs are still useful.
+    """
+
+    # --- required for a usable invoice ---
+    invoice_number: str
+    vendor_name: str
+    total_amount: float
+    # --- everything else stays optional (partial extraction is fine) ---
     invoice_date: str | None = None
     due_date: str | None = None
-    vendor_name: str | None = None
     vendor_address: str | None = None
     customer_name: str | None = None
     customer_address: str | None = None
     subtotal: float | None = None
     tax_amount: float | None = None
-    total_amount: float | None = None
     currency: str | None = None
     line_items: list[LineItem] = Field(default_factory=list)
 
@@ -49,9 +57,14 @@ class ContractParty(BaseModel):
 
 
 class Contract(BaseModel):
-    """Basic contract extraction schema."""
+    """Basic contract extraction schema.
 
-    title: str | None = None
+    Title is required: a contract without a title is unidentifiable.
+    Parties and effective dates are optional — partial extraction still
+    surfaces what was found for downstream HITL review.
+    """
+
+    title: str
     effective_date: str | None = None
     expiration_date: str | None = None
     parties: list[ContractParty] = Field(default_factory=list)
@@ -69,7 +82,14 @@ class BankTransaction(BaseModel):
 
 
 class BankStatement(BaseModel):
-    account_holder: str | None = None
+    """Bank statement extraction schema.
+
+    Account holder is required — a statement without an identified
+    account holder is unactionable. Transactions and balances are
+    optional and may be partially extracted.
+    """
+
+    account_holder: str
     account_number_last4: str | None = None
     statement_period_start: str | None = None
     statement_period_end: str | None = None
