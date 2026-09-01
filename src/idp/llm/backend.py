@@ -296,10 +296,15 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
         china:deepseek | china:qwen | china:zhipu |     (China providers)
         china:moonshot | china:yi | china:doubao |
         china:hunyuan | china:baichuan
+        slowmock                                            (load-test only)
 
     For China providers you can pass `multimodal=True` to switch to the
     provider's vision model if it has one. Pass `api_key=` or set the
     provider's env var.
+
+    The ``slowmock`` backend is only registered when ``IDP_ENABLE_SLOWMOCK=1``
+    is set in the environment. Production deployments never set this; it's
+    intended for load-testing only.
     """
     if not name:
         name = "auto"
@@ -316,6 +321,19 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
     if name in ("mock", "mock-ideal", "mock-random", "mock-omits"):
         mode = name.split("-", 1)[1] if "-" in name else "ideal"
         return MockBackend(mode=mode)
+    # SlowMock for load testing — only enabled via env var
+    if name == "slowmock":
+        if os.environ.get("IDP_ENABLE_SLOWMOCK") != "1":
+            raise ValueError(
+                "slowmock backend is disabled in production. "
+                "Set IDP_ENABLE_SLOWMOCK=1 to enable it (load-test only)."
+            )
+        from idp._testing_backends import SlowMockBackend as _SlowMockBackend
+        return _SlowMockBackend(
+            latency_ms=int(os.environ.get("LOAD_LATENCY_MS", "1500")),
+            jitter_ms=int(os.environ.get("LOAD_JITTER_MS", "500")),
+            **kwargs,
+        )
     # China providers: prefix with china:
     if name.startswith("china:"):
         from idp.llm.china import get_china_backend

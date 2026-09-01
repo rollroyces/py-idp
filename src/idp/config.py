@@ -79,7 +79,7 @@ class Settings:
         # Auth
         kwargs["api_key"] = e.get("IDP_API_KEY") or None
         kwargs["api_key_required"] = _validate_bool("IDP_API_KEY_REQUIRED", e.get("IDP_API_KEY_REQUIRED"), default=s.api_key_required)
-        kwargs["rate_limit_per_minute"] = _validate_int("IDP_RATE_LIMIT_PER_MINUTE", e.get("IDP_RATE_LIMIT_PER_MINUTE"), default=s.rate_limit_per_minute, min_v=0, max_v=10_000)
+        kwargs["rate_limit_per_minute"] = _validate_int("IDP_RATE_LIMIT_PER_MINUTE", e.get("IDP_RATE_LIMIT_PER_MINUTE"), default=s.rate_limit_per_minute, min_v=0, max_v=1_000_000)
 
         # Storage
         kwargs["storage_backend"] = _validate_choice("IDP_STORAGE_BACKEND", e.get("IDP_STORAGE_BACKEND"), choices=("memory", "json", "sql"), default=s.storage_backend)
