@@ -281,3 +281,59 @@ def test_resolve_dtype_float32_on_cpu():
     fake_torch.float32 = "float32-marker"
     out = b._resolve_dtype(fake_torch, device="cpu")
     assert out == "float32-marker"
+def test_construction_refuses_windows_arm64(monkeypatch):
+    """Windows arm64 raises RuntimeError at construction with a fallback hint."""
+    from idp.llm.nanonets import NanonetsVLBackend
+    with patch("platform.system", return_value="Windows"), \
+         patch("platform.machine", return_value="ARM64"), pytest.raises(RuntimeError) as exc_info:
+        NanonetsVLBackend()
+    msg = str(exc_info.value)
+    assert "Windows" in msg
+    assert "ARM64" in msg
+    # Should mention the fallback
+    assert "docling" in msg or "mock" in msg or "fallback" in msg.lower()
+
+
+def test_construction_warns_intel_mac(monkeypatch):
+    """Intel Mac (Darwin x86_64) raises RuntimeError at construction.
+
+    We treat Intel Mac as a hard-fail: no MPS, eGPU CUDA is unreliable.
+    Better to fail loud and have the user pick a real backend than to
+    silently run on CPU for 30-60s per page.
+    """
+    from idp.llm.nanonets import NanonetsVLBackend
+    with patch("platform.system", return_value="Darwin"), \
+         patch("platform.machine", return_value="x86_64"), pytest.raises(RuntimeError) as exc_info:
+        NanonetsVLBackend()
+    assert "Intel Mac" in str(exc_info.value) or "x86_64" in str(exc_info.value)
+
+
+def test_construction_succeeds_on_darwin_arm64(monkeypatch):
+    """Apple Silicon (M-series) is the tested target and should construct."""
+    from idp.llm.nanonets import NanonetsVLBackend
+    with patch("platform.system", return_value="Darwin"), \
+         patch("platform.machine", return_value="arm64"):
+        b = NanonetsVLBackend()
+    assert b is not None
+
+
+def test_construction_succeeds_on_linux_x86_64(monkeypatch):
+    """Linux x86_64 is supported (CPU or CUDA; the choice happens at load)."""
+    from idp.llm.nanonets import NanonetsVLBackend
+    with patch("platform.system", return_value="Linux"), \
+         patch("platform.machine", return_value="x86_64"):
+        b = NanonetsVLBackend()
+    assert b is not None
+
+
+def test_unsupported_platforms_table_completeness():
+    """The _UNSUPPORTED_PLATFORMS table must cover the known-broken cases."""
+    from idp.llm.nanonets import NanonetsVLBackend
+    keys = set(NanonetsVLBackend._UNSUPPORTED_PLATFORMS.keys())
+    # These are the two we explicitly know are broken
+    assert ("Windows", "ARM64") in keys
+    assert ("Darwin", "x86_64") in keys
+    # macOS arm64 must NOT be in the table (it works)
+    assert ("Darwin", "arm64") not in keys
+    # Linux x86_64 must NOT be in the table (works with or without CUDA)
+    assert ("Linux", "x86_64") not in keys

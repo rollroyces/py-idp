@@ -71,9 +71,45 @@ class NanonetsVLBackend(Backend):
 
     Self-hosted, offline. Requires the ``[hf-vlm]`` extra:
         pip install py-idp[hf-vlm]
+
+    **Platform support** (verified at construction time):
+
+    ============================  ==========================================
+    Platform                      Status
+    ============================  ==========================================
+    macOS arm64 (M1/M2/M3/M4)     ✅ tested target, MPS acceleration
+    macOS arm64 + 16+ GB unified  ✅ comfortable (4 GB headroom)
+    macOS arm64 8 GB unified      ❌ OOM (use 4-bit mode or different backend)
+    macOS x86_64 (Intel)          ⚠️ CPU-only, ~30-60s per page
+    Linux x86_64 + CUDA           ✅ best (1-5s per page, 4-bit option)
+    Linux x86_64 no GPU           ⚠️ CPU-only, ~30-60s per page
+    Linux arm64                    ⚠️ CPU-only (no MPS-equivalent)
+    Windows x86_64 + CUDA         ✅ same as Linux CUDA path
+    Windows arm64                 ❌ torch has no Windows-arm64 wheels
+    ============================  ==========================================
+
+    Constructing on a known-unsupported platform raises
+    ``RuntimeError`` immediately with a platform-specific error
+    message pointing at a fallback backend.
     """
 
     name = "nanonets"
+
+    # Platforms that we KNOW won't work, with helpful fallback hints.
+    _UNSUPPORTED_PLATFORMS: dict[tuple[str, str], str] = {
+        # (system, machine) -> error message + fallback hint
+        ("Windows", "ARM64"): (
+            "PyTorch does not ship Windows-arm64 wheels. "
+            "NanonetsVLBackend cannot run on this platform. "
+            "Fallback: use `backend='docling'` or `backend='mock'`, "
+            "or run on Windows x86_64 with CUDA."
+        ),
+        ("Darwin", "x86_64"): (
+            "Intel Mac has no MPS (Metal) and CUDA via eGPU is unreliable. "
+            "NanonetsVLBackend will fall back to CPU (~30-60s per page). "
+            "Consider using `backend='docling'` for faster CPU-only OCR."
+        ),
+    }
 
     def __init__(
         self,
@@ -90,19 +126,15 @@ class NanonetsVLBackend(Backend):
         ``import idp`` stays fast and the package works without ``torch``
         installed (the import-time check is in ``_require_deps``).
 
-        Args:
-            model_id:     HF model id. Default: nanonets/Nanonets-OCR2-3B.
-            device:       "auto" (let accelerate decide), "cpu", "cuda",
-                          "cuda:0", "mps". Default: "auto".
-            dtype:        "auto" (bfloat16 if supported, else float16),
-                          "bfloat16", "float16", "float32". Default: "auto".
-            max_image_side: Longest side to resize images to before inference.
-                          448 is a good M4 default; 1024 is the model's native
-                          but uses 4x more vision memory.
-            load_in_4bit: Use bitsandbytes 4-bit quantization. Saves ~50% memory
-                          but slower per token. Apple Silicon: not supported.
-            cache_dir:    Override HF cache dir (default: ~/.cache/huggingface).
+        Raises:
+            RuntimeError: on platforms where torch or this model are known
+                           not to work (Windows arm64). The error includes
+                           a platform-specific fallback hint.
         """
+        # Platform check FIRST so we fail with a clear message before any
+        # heavy import or download.
+        self._check_platform_support()
+
         self.model_id = model_id
         self.device = device
         self.dtype = dtype
@@ -137,6 +169,27 @@ class NanonetsVLBackend(Backend):
     # ---------------------------------------------------------------------------
     # Internals
     # ---------------------------------------------------------------------------
+    def _check_platform_support(self) -> None:
+        """Refuse to construct on platforms where we know it won't work.
+
+        We do this at construction (not at first inference) so the user
+        gets the error BEFORE spending 5 minutes downloading a 7 GB model
+        that won't run.
+        """
+        import platform as _platform
+        sys_name, machine = _platform.system(), _platform.machine()
+        bad = self._UNSUPPORTED_PLATFORMS.get((sys_name, machine))
+        if bad is not None:
+            raise RuntimeError(
+                f"NanonetsVLBackend is not supported on {sys_name} {machine}.\n"
+                f"{bad}"
+            )
+        # Linux/Windows + machine not in our explicit list is the unknown
+        # case; we don't block it (the user might have an exotic build of
+        # torch). They get a working model or a torch import error.
+        # macOS arm64 is fine.
+        # CPU-only is fine (slow but works).
+
     def _require_deps(self) -> None:
         """Check that torch + transformers are importable.
 

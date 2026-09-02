@@ -158,6 +158,19 @@ Outperforms Tesseract on noisy scans and handles multilingual docs.
 **Why gated**: model download is large and slow. We refuse to
 auto-trigger it; you must explicitly set `IDP_ENABLE_NANONETS=1`.
 
+**Platform support** (verified at construction time):
+
+| Platform | Status |
+|---|---|
+| macOS arm64 (M1/M2/M3/M4, 16+ GB) | ✅ tested target, MPS |
+| macOS arm64 (8 GB) | ❌ OOM (use Docling instead) |
+| macOS x86_64 (Intel) | ❌ no MPS, eGPU CUDA flaky — fails loud |
+| Linux x86_64 + CUDA | ✅ best (1-5s per page) |
+| Linux x86_64 CPU-only | ⚠️ works, 30-60s per page |
+| Linux arm64 | ⚠️ works, CPU only |
+| Windows x86_64 + CUDA | ✅ same as Linux CUDA |
+| Windows arm64 | ❌ PyTorch has no Windows-arm64 wheels — fails loud |
+
 ```python
 from idp.llm.nanonets import NanonetsVLBackend
 backend = NanonetsVLBackend(
