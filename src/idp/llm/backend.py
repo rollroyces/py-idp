@@ -351,6 +351,19 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
             jitter_ms=int(os.environ.get("LOAD_JITTER_MS", "500")),
             **kwargs,
         )
+    if name == "nanonets":
+        # Gated like slowmock: requires explicit opt-in. Reason: the model
+        # download is ~7 GB and the first call is slow. Production deployments
+        # shouldn't accidentally trigger that.
+        if os.environ.get("IDP_ENABLE_NANONETS") != "1":
+            raise ValueError(
+                "nanonets backend is gated. To enable:\n"
+                "  pip install py-idp[hf-vlm]   # installs torch + transformers\n"
+                "  export IDP_ENABLE_NANONETS=1\n"
+                "  IDP_BACKEND=nanonets  # or: backend = NanonetsVLBackend()"
+            )
+        from idp.llm.nanonets import NanonetsVLBackend as _NanonetsVLBackend
+        return _NanonetsVLBackend(**kwargs)
     # China providers: prefix with china:
     if name.startswith("china:"):
         from idp.llm.china import get_china_backend

@@ -5,6 +5,25 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.0] — 2026-09-02 — Self-hosted VLM backend
+
+### Added
+
+* **`NanonetsVLBackend`** in `idp.llm.nanonets` — self-hosted,
+  offline OCR + extraction via `nanonets/Nanonets-OCR2-3B` (Qwen2.5-VL
+  fine-tune on Hugging Face). No API key, no cloud egress. ~7 GB
+  weights cached at `~/.cache/huggingface/hub/`. Runs on Apple
+  Silicon (MPS) or CUDA. Lazy model load on first `.complete()` call.
+  Configurable `device`, `dtype`, `max_image_side`, `load_in_4bit`.
+
+* **`[hf-vlm]` extra** in `pyproject.toml`:
+  `torch`, `transformers>=4.45`, `accelerate`, `safetensors`,
+  `Pillow`, `huggingface-hub`.
+
+* **Gated by `IDP_ENABLE_NANONETS=1`** to avoid surprise ~7 GB
+  downloads. `get_backend("nanonets")` raises a clear error if the
+  gate is off or `[hf-vlm]` is not installed.
+
 ## [0.2.0] — 2026-09-01 — Production hardening
 
 ### Added

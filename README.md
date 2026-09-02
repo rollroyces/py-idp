@@ -20,6 +20,7 @@ pip install py-idp[docling]      # IBM Docling — best PDF table extraction
 pip install py-idp[openai]       # OpenAI SDK (also used for 8 China LLMs)
 pip install py-idp[anthropic]    # Anthropic SDK
 pip install py-idp[api]           # FastAPI server (idp.api:app — production-ready)
+pip install py-idp[hf-vlm]        # Self-hosted Nanonets-OCR2-3B (Apple Silicon / CUDA)
 pip install py-idp[dev]          # pytest + ruff + mypy
 ```
 
@@ -127,6 +128,43 @@ from idp.llm import get_china_backend
 
 backend = get_china_backend("qwen", multimodal=True)
 # backend.model == "qwen2.5-vl-72b-instruct"
+```
+
+### Self-hosted (Nanonets-OCR2-3B on Apple Silicon / CUDA)
+
+For documents you can't send to a third party. **No API key, no cloud
+egress, fully offline after the first download** (~7 GB cached to
+`~/.cache/huggingface/hub/`).
+
+```bash
+pip install py-idp[hf-vlm]    # adds torch + transformers + accelerate + safetensors
+export IDP_ENABLE_NANONETS=1  # explicit opt-in (avoids surprise downloads)
+export IDP_BACKEND=nanonets
+idp run scan.pdf --backend nanonets
+```
+
+**Memory budget on Apple M4 16 GB** (float16, 448×448 image):
+- weights + vision encoder + KV cache: ~8.3 GB
+- OS + apps: ~3.5 GB
+- headroom: ~4 GB (comfortable)
+
+**Speed**: ~5-15 sec per page on M4. First call: 5-10 min to download
+the model. Subsequent calls: ~10 s to load from cache.
+
+**Why Nanonets-OCR2-3B**: open weights, no auth, Apache-2.0 (Qwen2.5-VL
+base) — verify the Nanonets fine-tune license before commercial use.
+Outperforms Tesseract on noisy scans and handles multilingual docs.
+
+**Why gated**: model download is large and slow. We refuse to
+auto-trigger it; you must explicitly set `IDP_ENABLE_NANONETS=1`.
+
+```python
+from idp.llm.nanonets import NanonetsVLBackend
+backend = NanonetsVLBackend(
+    device="mps",          # or "cuda", "cpu", "auto"
+    max_image_side=448,    # 4x less vision memory than 1024, ~95% acc
+    load_in_4bit=False,    # True if you OOM at float16
+)
 ```
 
 ---

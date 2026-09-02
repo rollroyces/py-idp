@@ -26,5 +26,5 @@ Design draws from:
 from idp.core.document import Block, Document, Page
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = ["Document", "Page", "Block", "Pipeline", "PipelineResult"]

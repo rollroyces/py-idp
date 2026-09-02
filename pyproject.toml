@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-idp"
-version = "0.2.0"
+version = "0.3.0"
 description = "General-purpose, AI-enabled Intelligent Document Processing framework for Python. OCR + multimodal extraction with Pydantic schemas, confidence assessment, HITL review, and a built-in eval harness. Supports OpenAI, Anthropic, Ollama, and 8 China LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,6 +40,17 @@ ocr = ["pytesseract>=0.3.10", "Pillow>=10.0"]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.27"]
 ollama = ["ollama>=0.2"]
+# Hugging Face vision-language model (Nanonets-OCR2-3B for self-hosted OCR).
+# Heavy: ~3 GB pip install (torch + transformers), ~7 GB model weights.
+# Runs offline on MPS (Apple Silicon) or CUDA. No API key needed.
+hf-vlm = [
+    "torch>=2.1",
+    "transformers>=4.45",
+    "accelerate>=0.34",
+    "safetensors>=0.4",
+    "Pillow>=10.0",
+    "huggingface-hub>=0.24",
+]
 # API server example (FastAPI + uvicorn)
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
 # China LLM providers (OpenAI-compatible; no extra deps required — uses httpx)
