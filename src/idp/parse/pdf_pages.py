@@ -154,7 +154,7 @@ def _pil_to_data_uri(img: Any, max_side: int, fmt: str = "PNG") -> str:
         scale = max_side / max(img.size)
         new_size = (max(1, int(img.size[0] * scale)),
                     max(1, int(img.size[1] * scale)))
-        img = img.resize(new_size, Image.LANCZOS)
+        img = img.resize(new_size, Image.LANCZOS)  # type: ignore[attr-defined]
 
     buf = BytesIO()
     if fmt.upper() == "PNG":

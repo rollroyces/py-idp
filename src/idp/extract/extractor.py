@@ -34,7 +34,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from idp.core.document import Document
+from idp.chunker import (
+    PageChunker,
+    TokenChunker,
+    merge_extractions,
+    should_chunk_pages,
+    should_chunk_text,
+)
+from idp.core.document import Document, Page
 from idp.core.types import ExtractionMode
 from idp.llm.backend import Backend, CompletionRequest, Message
 
@@ -168,17 +175,17 @@ def render_first_n_pages_to_images(doc: Document, n: int = 3) -> list[str]:
             e,
         )
         return []
-    out: list[str] = []
+    out_pages: list[str] = []
     try:
         pages = convert_from_path(doc.source_path, dpi=150, first_page=1, last_page=n)
         from io import BytesIO
         for img in pages:
             buf = BytesIO()
             img.save(buf, format="PNG")
-            out.append(base64.b64encode(buf.getvalue()).decode())
+            out_pages.append(base64.b64encode(buf.getvalue()).decode())
     except Exception as e:  # noqa: BLE001
         log.warning("pdf rendering failed for %s: %s", doc.source_path, e)
-    return out
+    return out_pages
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +229,25 @@ def extract(
         doc.mode = mode.value if isinstance(mode, ExtractionMode) else str(mode)
         return doc
 
+    # Chunk the document when it won't fit in one LLM call. Multimodal
+    # uses page-based chunking (groups of pages with overlap); text uses
+    # token-based chunking (tiktoken). Each chunk gets its own LLM call,
+    # then we merge the per-chunk results.
+    chunks = _maybe_chunk(doc, text, images_b64, mode, backend)
+    if len(chunks) > 1:
+        log.info("extract: chunking %d -> %d chunks for %s",
+                 _doc_size(doc, text, images_b64, mode), len(chunks), doc.source_path)
+        per_chunk_dicts = _extract_chunks(chunks, schema, backend,
+                                          extra_instructions=extra_instructions,
+                                          doc=doc)
+        merged = _validate_and_merge_chunks(per_chunk_dicts, schema, doc)
+        doc.extraction = merged
+        doc.extraction_schema = schema.__name__
+        doc.mode = mode.value if isinstance(mode, ExtractionMode) else str(mode)
+        doc.errors.append(f"extract_chunked: {len(chunks)} chunks")
+        return doc
+
+    # Single-chunk path: unchanged from before
     messages = _build_messages(schema, text, images_b64, extra_instructions=extra_instructions)
     req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
     raw = ""
@@ -265,3 +291,116 @@ def extract(
     doc.extraction_schema = schema.__name__
     doc.mode = mode.value if isinstance(mode, ExtractionMode) else str(mode)
     return doc
+
+
+# ---------------------------------------------------------------------------
+# Chunking helpers
+# ---------------------------------------------------------------------------
+def _doc_size(
+    doc: Document,
+    text: str,
+    images_b64: list[str],
+    mode: ExtractionMode,
+) -> int:
+    """Return the dimension the chunker cares about: page count or char count."""
+    if mode == ExtractionMode.MULTIMODAL and doc.pages:
+        return len(doc.pages)
+    return len(text)
+
+
+def _maybe_chunk(
+    doc: Document,
+    text: str,
+    images_b64: list[str],
+    mode: ExtractionMode,
+    backend: Backend,
+) -> list[tuple[str, list[str]]]:
+    """Decide if chunking is needed and return a list of (chunk_text, chunk_images).
+
+    Each element of the returned list is one chunk ready to feed into
+    ``_build_messages``. The list has length 1 when no chunking is needed
+    (the caller can short-circuit), or >1 otherwise.
+    """
+    # Multimodal + doc has pages -> PageChunker
+    if mode == ExtractionMode.MULTIMODAL and backend.is_multimodal and doc.pages:
+        page_chunker = PageChunker(max_pages=4, overlap_pages=1)
+        if not should_chunk_pages(doc.pages, max_pages=page_chunker.max_pages):
+            # Single-chunk: feed everything as-is (mirrors single-call path)
+            return [("", _collect_images_for_pages(doc.pages))]
+        per_chunk_texts = page_chunker.collect_texts(doc.pages)
+        per_chunk_imgs = page_chunker.collect_images(doc.pages)
+        # If doc.pages has no images (text parser was used), fall back to
+        # the global images_b64 — only meaningful for the first chunk.
+        # zip(strict=True) is safe: same chunker produces both lists.
+        return list(zip(per_chunk_texts, per_chunk_imgs, strict=True))
+
+    # Text path -> TokenChunker
+    text_chunker = TokenChunker(max_tokens=4000, overlap_tokens=200)
+    if not should_chunk_text(text, max_tokens=text_chunker.max_tokens):
+        return [(text, [])]
+    texts = text_chunker.split(text)
+    return [(t, []) for t in texts]
+
+
+def _collect_images_for_pages(pages: list[Page]) -> list[str]:
+    """Flatten all per-page images_b64 into one list."""
+    return [img for p in pages for img in (p.images_b64 or [])]
+
+
+def _extract_chunks(
+    chunks: list[tuple[str, list[str]]],
+    schema: type[BaseModel],
+    backend: Backend,
+    *,
+    extra_instructions: str,
+    doc: Document,
+) -> list[dict[str, Any]]:
+    """Call backend.complete() once per chunk; return list of parsed dicts.
+
+    Errors per chunk are logged on ``doc.errors`` and the failed chunk
+    contributes an empty dict — so a single bad chunk doesn't kill the
+    whole batch. This matches the user's "process 1000 docs / month"
+    resilience ask.
+    """
+    out: list[dict[str, Any]] = []
+    for i, (text, images) in enumerate(chunks):
+        if not text and not images:
+            out.append({})
+            continue
+        messages = _build_messages(schema, text, images,
+                                   extra_instructions=extra_instructions)
+        req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
+        try:
+            raw = backend.complete(req)
+        except Exception as e:  # noqa: BLE001
+            doc.errors.append(f"extract_chunk_failed[{i}]: {e}")
+            raw = ""
+        parsed = _safe_load(raw)
+        out.append(parsed if isinstance(parsed, dict) else {})
+    return out
+
+
+def _validate_and_merge_chunks(
+    per_chunk_dicts: list[dict[str, Any]],
+    schema: type[BaseModel],
+    doc: Document,
+) -> dict[str, Any]:
+    """Merge per-chunk dicts, then run Pydantic validation on the merge.
+
+    If validation fails, fall back to the merged dict anyway — the
+    per-chunk info is more useful than discarding it.
+    """
+    merged = merge_extractions(per_chunk_dicts, prefer="first")
+    # Strip internal chunk_count marker before validation
+    clean = {k: v for k, v in merged.items() if not k.startswith("_")}
+    try:
+        validated_obj = schema.model_validate(clean)
+        validated = validated_obj.model_dump(mode="json")
+    except Exception as e:  # noqa: BLE001
+        log.debug("schema validation at merge time failed: %s", e)
+        doc.errors.append(f"extract_merge_validation_failed: {e}")
+        validated = clean
+    # Re-attach chunk_count marker so downstream observability can see it
+    if "_chunk_count" in merged:
+        validated["_chunk_count"] = merged["_chunk_count"]
+    return validated
