@@ -91,6 +91,65 @@ def providers():
     console.print("Mock backends:  mock | mock-random | mock-omits (no API key needed)")
 
 
+@app.command(name="discover-schema")
+def discover_schema_cmd(
+    path: str = typer.Argument(..., help="Path to the PDF to analyze"),
+    hint: str = typer.Option(
+        "",
+        "--hint",
+        "-h",
+        help="Natural-language description of fields to extract (e.g. 'extract vendor_name, total_amount, and line items')",
+    ),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write JSON Schema to this file (default: stdout)"),
+    backend: str = typer.Option(
+        "nanonets",
+        "--backend",
+        "-b",
+        help="Multimodal backend to use. Defaults to nanonets; requires IDP_ENABLE_NANONETS=1.",
+    ),
+):
+    """Auto-discover a Pydantic schema from a PDF + hint.
+
+    Given a scanned PDF and a natural-language hint, this command asks
+    the configured multimodal backend to propose a JSON Schema, then
+    compiles it to a Pydantic class.
+
+    The output is the raw JSON Schema. To get a Pydantic class for use
+    with Pipeline(schema=...), call idp.discover_schema(...) from Python.
+    """
+    from idp.discover import _default_backend_factory
+
+    console.print(f"[cyan]Discovering schema for[/cyan] {path}")
+    console.print(f"[cyan]Hint:[/cyan] {hint or '(infer from document)'}")
+
+    try:
+        backend_obj = _default_backend_factory(backend)
+    except (RuntimeError, ValueError) as e:
+        console.print(f"[red]backend error:[/red] {e}")
+        raise SystemExit(1) from None
+
+    from idp.discover import discover_schema
+
+    try:
+        result = discover_schema(path, hint=hint, backend=backend_obj)
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        console.print(f"[red]discovery failed:[/red] {e}")
+        raise SystemExit(1) from None
+
+    console.print(f"\n[green]Discovered schema[/green] (backend: {result.backend_name}):")
+    console.print(f"[bold]class:[/bold] {result.schema_class.__name__}")
+    console.print(f"[bold]fields:[/bold] {len(result.schema_class.model_fields)}")
+    for name, field in result.schema_class.model_fields.items():
+        required = "(required)" if field.is_required() else "(optional)"
+        console.print(f"  - {name}: {field.annotation} {required}")
+
+    if output:
+        Path(output).write_text(json.dumps(result.json_schema, indent=2))
+        console.print(f"\n[green]saved:[/green] {output}")
+    else:
+        console.print("\n[dim](pass --output FILE to save the JSON Schema)[/dim]")
+
+
 @app.command()
 def serve(
     port: int = typer.Option(8501, help="Port for the Streamlit HITL UI."),

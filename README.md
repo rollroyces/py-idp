@@ -3,12 +3,12 @@
 > **General-purpose, AI-enabled Intelligent Document Processing for Python.**
 > Six-stage pipeline (parse → classify → extract → assess → validate → HITL).
 > 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
-> **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B.**
+> **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B. AI-driven schema discovery.**
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-368_passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-399_passing-brightgreen.svg)](#development)
 [![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](#)
 
 ---
@@ -239,6 +239,7 @@ and [`tests/test_chunker.py`](tests/test_chunker.py) for the 34 tests.
 idp run path/to/invoice.pdf --schema Invoice --backend ollama --output out.json
 idp providers                                          # full provider table
 idp schemas                                            # built-in Pydantic schemas
+idp discover-schema scan.pdf --hint "extract vendor_name, total_amount" --output schema.json
 idp eval --dataset src/idp/eval/datasets/invoices \
           --strategy mock,mock-omits --output results.json
 idp serve                                              # launch Streamlit HITL UI on :8501
@@ -265,6 +266,72 @@ result = Pipeline(backend="ollama", schema=Receipt).run(
     Document.from_path("receipt.jpg")
 )
 ```
+
+---
+
+## Auto-schema discovery
+
+You have a scanned PDF and a vague sense of "I want fields X, Y, Z" —
+but no Pydantic class yet. `discover_schema()` asks the multimodal LLM
+(NanonetsVLBackend by default) to propose a JSON Schema, then compiles
+it to a Pydantic class you can pass straight into `Pipeline(schema=...)`.
+
+```python
+import idp
+
+Schema, schema_dict = idp.discover_schema(
+    "scan.pdf",
+    hint="extract vendor_name, invoice_number, total_amount, and line items",
+)
+# Schema is a Pydantic BaseModel subclass — pass it directly:
+result = idp.Pipeline(backend="nanonets", schema=Schema).run(
+    idp.Document.from_path("scan.pdf")
+)
+print(result.document.extraction)
+```
+
+The returned `DiscoveryResult` exposes both the compiled Pydantic class
+and the raw JSON Schema dict:
+
+```python
+result = idp.discover_schema("scan.pdf", hint="...")
+result.schema_class    # the Pydantic class
+result.json_schema     # the raw JSON Schema dict
+result.raw_response    # raw LLM output (debug aid)
+result.backend_name    # "NanonetsVLBackend"
+result.doc             # the parsed Document (reuse for extraction)
+```
+
+**CLI equivalent:**
+
+```bash
+export IDP_ENABLE_NANONETS=1
+idp discover-schema scan.pdf \
+    --hint "extract vendor_name, total_amount, and line items" \
+    --output schema.json
+```
+
+**Defaults:** pages capped at 4 (fits most 16k-context VLMs), Nanonets
+backend (must set `IDP_ENABLE_NANONETS=1`), fallback to Mock for tests.
+
+**Honest limits:**
+
+- LLM-proposed field names are sometimes wrong — the user hint steers
+  this but doesn't guarantee it. Always review the resulting schema
+  against a few real extractions before using in production.
+- Field types are inferred from the JSON Schema (string / number /
+  integer / boolean / array / nested object). Required-vs-optional
+  is preserved.
+- LLMs sometimes emit ```json fences or wrap output in prose; the
+  parser strips both. Pure garbage raises `ValueError` with the first
+  200 chars for debugging.
+- This is **schema discovery** — it tells you *what fields exist* and
+  *what they're called*. It is not schema **validation** — pass the
+  discovered schema into `Pipeline(schema=...)` and use HITL review
+  for the validation step.
+
+See [`src/idp/discover.py`](src/idp/discover.py) for the implementation
+and [`tests/test_discover.py`](tests/test_discover.py) for the 31 tests.
 
 ---
 
@@ -352,6 +419,7 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | Docker | `Dockerfile`, `docker-compose.yml` | your infra |
 | **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (`PolicyCache`) |
 | **Document chunking** | `idp.chunker` (auto for oversized input) | custom `PageChunker` / `TokenChunker` |
+| **Schema discovery** | `idp.discover_schema` + `idp discover-schema` | custom multimodal backend |
 
 ### Not in 0.3 (deliberately)
 
@@ -461,7 +529,7 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 368 tests, no API key needed
+pytest -v                       # 399 tests, no API key needed
 ruff check src tests examples   # lint
 mypy src/idp                    # type-check (clean across 56 files)
 

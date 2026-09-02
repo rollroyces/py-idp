@@ -24,7 +24,16 @@ Design draws from:
 """
 
 from idp.core.document import Block, Document, Page
+from idp.discover import DiscoveryResult, discover_schema
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
 __version__ = "0.3.0"
-__all__ = ["Document", "Page", "Block", "Pipeline", "PipelineResult"]
+__all__ = [
+    "Block",
+    "DiscoveryResult",
+    "Document",
+    "Page",
+    "Pipeline",
+    "PipelineResult",
+    "discover_schema",
+]
