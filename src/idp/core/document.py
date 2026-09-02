@@ -46,6 +46,11 @@ class Page:
     width: float | None = None
     height: float | None = None
     image_path: str | None = None  # rendered page image (used by multimodal)
+    # Per-page base64-encoded PNG data URIs. Populated by parsers that
+    # render the page (e.g. PdfPagesParser). Consumed by multimodal
+    # backends (NanonetsVLBackend). Avoids hard dep on Pillow in
+    # non-multimodal pipelines.
+    images_b64: list[str] = field(default_factory=list)
 
     @property
     def char_count(self) -> int:

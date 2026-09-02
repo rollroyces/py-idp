@@ -138,7 +138,23 @@ def render_first_n_pages_to_images(doc: Document, n: int = 3) -> list[str]:
     Failures log a warning (visible at INFO+); they are NOT silently
     swallowed because the user might be expecting a multimodal call and
     need to know the multimodal path degraded to text-only.
+
+    If a previous parser stage already rendered pages to images
+    (e.g. ``PdfPagesParser`` populates ``doc.pages[i].images_b64``),
+    those images are reused and the PDF is NOT re-rendered.
     """
+    # Fast path: a parser already gave us images. Reuse them.
+    if doc.pages and any(p.images_b64 for p in doc.pages):
+        out: list[str] = []
+        for p in doc.pages:
+            if not p.images_b64:
+                continue
+            # Per-page images_b64 is a list; flatten to one image per page
+            out.extend(p.images_b64)
+            if len(out) >= n:
+                return out[:n]
+        return out[:n] if out else []
+
     if doc.extension != "pdf":
         return []
     if n <= 0:

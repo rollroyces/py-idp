@@ -193,6 +193,10 @@ def get_parser(name: str = "auto") -> Parser:
         return DoclingParser()
     if name == "pdfplumber":
         return PdfPlumberParser()
+    if name == "pdf-pages":
+        # Lazy import to avoid pulling in pdf2image when not used.
+        from idp.parse.pdf_pages import PdfPagesParser
+        return PdfPagesParser()
     if name == "plain":
         return PlainTextParser()
     raise ValueError(f"Unknown parser: {name}")
@@ -225,6 +229,9 @@ def parse_document(doc: Document, parser: Parser | None = None) -> Document:
                 page_number=p["page"],
                 text=p["text"],
                 image_path=p.get("image_path"),
+                # Propagate per-page images (used by multimodal backends
+                # like NanonetsVLBackend). May be empty for text parsers.
+                images_b64=p.get("images_b64", []) or [],
             )
         )
     return doc
