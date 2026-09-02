@@ -440,6 +440,11 @@ def _empty_schema(schema_str: str) -> str:
         schema = json.loads(schema_str)
     except json.JSONDecodeError:
         return "{}"
+    # Guard against non-dict JSON literals ("null", "true", "[]", "42", etc.).
+    # The downstream _stub() expects a JSON-Schema dict; anything else means
+    # the prompt didn't carry a parseable schema, so return the empty stub.
+    if not isinstance(schema, dict):
+        return "{}"
     return json.dumps(_stub(schema, defs=schema.get("$defs", {})), indent=2)
 
 
@@ -522,6 +527,10 @@ def _stub(
 def _perturb_json(schema_str: str) -> str:
     """Simulate hallucination: swap values to wrong strings / wrong numbers."""
     base = json.loads(_empty_schema(schema_str))
+    # _empty_schema may return the JSON literal "null" when the prompt's
+    # schema block has no fields to stub. Handle non-dict gracefully.
+    if not isinstance(base, dict):
+        return "{}"
     for k, v in list(base.items()):
         if isinstance(v, str):
             base[k] = "MOCK_WRONG_" + k
@@ -538,6 +547,9 @@ def _perturb_json(schema_str: str) -> str:
 def _omit_fields(schema_str: str) -> str:
     """Drop half the leaves: low-confidence simulator."""
     base = json.loads(_empty_schema(schema_str))
+    # Same non-dict guard as _perturb_json: "null" base → "{}" output.
+    if not isinstance(base, dict):
+        return "{}"
     keys = list(base.keys())
     for k in keys[::2]:
         base[k] = None
