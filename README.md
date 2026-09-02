@@ -3,12 +3,13 @@
 > **General-purpose, AI-enabled Intelligent Document Processing for Python.**
 > Six-stage pipeline (parse → classify → extract → assess → validate → HITL).
 > 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
+> **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B.**
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-263_passing-brightgreen.svg)](#development)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-368_passing-brightgreen.svg)](#development)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](#)
 
 ---
 
@@ -25,6 +26,7 @@ pip install py-idp[dev]          # pytest + ruff + mypy
 ```
 
 > No API key needed to install or run the test suite — `MockBackend` ships in-tree.
+> `tiktoken` is installed automatically by the core package (used for token-budget chunking).
 
 ---
 
@@ -178,7 +180,56 @@ backend = NanonetsVLBackend(
     max_image_side=448,    # 4x less vision memory than 1024, ~95% acc
     load_in_4bit=False,    # True if you OOM at float16
 )
+
+# End-to-end with PdfPagesParser (renders pages to images)
+from idp import Document, Pipeline
+from idp.parse.parser import parse_document
+from idp.core.schemas import Invoice
+
+doc = Document.from_path("scan.pdf")
+parse_document(doc, parser="pdf-pages")   # renders pages to base64 PNG
+result = Pipeline(backend=backend, schema=Invoice).run(doc)
+print(result.document.extraction)
 ```
+
+### Auto-chunking for oversized documents
+
+Nanonets-OCR2-3B has a 16k token context. A 50-page invoice PDF won't
+fit in one call. `extract()` detects this and automatically splits
+the input, runs the model once per chunk, and merges the per-chunk
+extractions. **No glue code required** — it's invisible to the caller.
+
+Two chunkers ship:
+
+| chunker | when | default config |
+|---|---|---|
+| `PageChunker` | multimodal (NanonetsVLBackend + page images) | 4 pages per chunk, 1-page overlap |
+| `TokenChunker` | text extractors (OCR + LLM) | 4000 tokens per chunk, 200-token overlap (tiktoken) |
+
+```python
+from idp.chunker import PageChunker, TokenChunker
+
+# Tighter memory budget on a small M-series Mac
+chunker = PageChunker(max_pages=2, overlap_pages=1)
+
+# Or pass directly to the pipeline
+from idp.pipeline import Pipeline
+pipe = Pipeline(backend=backend, schema=Invoice, chunker=chunker)
+
+# End-to-end: chunks, calls, merges, validates — one call
+result = pipe.run(Document.from_path("huge-50-page-scan.pdf"))
+```
+
+The merged extraction includes a `_chunk_count` marker so you can
+attribute cost and observability per chunk run.
+
+**Per-chunk failure resilience:** if one chunk's LLM call fails, the
+error is logged (`extract_chunk_failed[i]`) but other chunks' data is
+still merged in. You get partial results + a clear error trail, not
+a hard crash.
+
+See [`src/idp/chunker.py`](src/idp/chunker.py) for the implementation
+and [`tests/test_chunker.py`](tests/test_chunker.py) for the 34 tests.
 
 ---
 
@@ -214,6 +265,46 @@ result = Pipeline(backend="ollama", schema=Receipt).run(
     Document.from_path("receipt.jpg")
 )
 ```
+
+---
+
+## Chunking for oversized documents
+
+Most LLMs cap context at 6k-200k tokens. A long invoice, contract, or
+multi-page scan may exceed that. `py-idp` **auto-detects oversized
+input, chunks it, runs the LLM once per chunk, and merges the
+per-chunk extractions** — all without glue code.
+
+| chunker | when used | default config |
+|---|---|---|
+| `PageChunker` | multimodal backends (NanonetsVLBackend, GPT-4o, etc.) | 4 pages per chunk, 1-page overlap |
+| `TokenChunker` | text extractors (OCR + LLM) | 4000 tokens per chunk, 200-token overlap (tiktoken) |
+
+**Defaults are tuned for the most common models:**
+- 4 pages @ 200dpi ≈ 3000 image tokens → fits Nanonets-OCR2-3B (16k context)
+- 4000 text tokens → fits qwen2.5:0.5b (6k context) and llama3.2 (8k)
+
+**Per-chunk failure resilience:** if one chunk's LLM call fails, the
+error is logged (`extract_chunk_failed[i]`) but other chunks' data is
+still merged. Partial results > no results.
+
+```python
+from idp.chunker import PageChunker
+
+# Tight memory budget (M-series Mac with 16 GB unified)
+chunker = PageChunker(max_pages=2, overlap_pages=1)
+result = Pipeline(backend="nanonets", schema="Invoice", chunker=chunker).run(
+    Document.from_path("huge-50-page-scan.pdf")
+)
+print(result.document.extraction.get("_chunk_count"))  # ~25
+```
+
+The merged extraction is **schema-validated as a whole** after merging,
+so you still get a Pydantic-typed result even though it was built from
+many small extractions.
+
+See [`src/idp/chunker.py`](src/idp/chunker.py) for the implementation
+and [`tests/test_chunker.py`](tests/test_chunker.py) for the 34 tests.
 
 ---
 
@@ -260,8 +351,9 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | HITL UI | `idp.hitl.app` (Streamlit) | React / FastAPI |
 | Docker | `Dockerfile`, `docker-compose.yml` | your infra |
 | **RL from HITL corrections** | `idp.rl` + `idp rl-update` | online per-review update (`PolicyCache`) |
+| **Document chunking** | `idp.chunker` (auto for oversized input) | custom `PageChunker` / `TokenChunker` |
 
-### Not in 0.1 (deliberately)
+### Not in 0.3 (deliberately)
 
 Multi-tenant isolation, SSO/SAML/RBAC, audit-grade storage — needed for SaaS but premature for a single-tenant self-host. Open an issue to request.
 
@@ -369,13 +461,16 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 263 tests, no API key needed
+pytest -v                       # 368 tests, no API key needed
 ruff check src tests examples   # lint
+mypy src/idp                    # type-check (clean across 56 files)
 
 python -m examples.invoice      # end-to-end demo (no API key needed)
+python -m examples.nanonets_ocr2  # NanonetsVLBackend end-to-end (needs IDP_ENABLE_NANONETS=1)
+python -m examples.batch        # process_batch() helper for Databricks-style batches
 ```
 
-`import idp; idp.__version__` → `0.2.0`.
+`import idp; idp.__version__` → `0.3.0`.
 
 ---
 
