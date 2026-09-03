@@ -271,6 +271,11 @@ result = Pipeline(backend="ollama", schema=Receipt).run(
 
 ## Auto-schema discovery
 
+> **Try it:** `python -m examples.discover_schema_sample`
+> Runs 6 end-to-end scenarios on a real PDF (generates a 2-page invoice,
+> discovers schema, runs extraction, exercises edge cases). No API key
+> or poppler required.
+
 You have a scanned PDF and a vague sense of "I want fields X, Y, Z" —
 but no Pydantic class yet. `discover_schema()` asks the multimodal LLM
 (NanonetsVLBackend by default) to propose a JSON Schema, then compiles
@@ -330,8 +335,10 @@ backend (must set `IDP_ENABLE_NANONETS=1`), fallback to Mock for tests.
   discovered schema into `Pipeline(schema=...)` and use HITL review
   for the validation step.
 
-See [`src/idp/discover.py`](src/idp/discover.py) for the implementation
-and [`tests/test_discover.py`](tests/test_discover.py) for the 31 tests.
+See [`src/idp/discover.py`](src/idp/discover.py) for the implementation,
+[`tests/test_discover.py`](tests/test_discover.py) for the 31 tests,
+and [`examples/discover_schema_sample.py`](examples/discover_schema_sample.py)
+for a runnable end-to-end demo.
 
 ---
 
@@ -536,6 +543,7 @@ mypy src/idp                    # type-check (clean across 56 files)
 python -m examples.invoice      # end-to-end demo (no API key needed)
 python -m examples.nanonets_ocr2  # NanonetsVLBackend end-to-end (needs IDP_ENABLE_NANONETS=1)
 python -m examples.batch        # process_batch() helper for Databricks-style batches
+python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
 `import idp; idp.__version__` → `0.3.0`.
