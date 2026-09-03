@@ -263,14 +263,28 @@ def extract(
     # coerced into a "valid" empty extraction by the user's `Optional`
     # fields. That was a data-loss bug in v0.1.
     extracted = _safe_load(raw)
+    # Free the LLM response string — `extracted` is now a parsed dict
+    # and `raw` is no longer needed. For a large extraction this is
+    # the dominant string in memory.
+    del raw
     raw_had_error = "_error" in extracted
+    extracted_error = extracted.get("_error") if raw_had_error else None
+    extracted_raw_text = extracted.get("_raw") if raw_had_error else None
 
     validated: dict[str, Any] = {}
     try:
         validated_obj = schema.model_validate(extracted)
+        # model_dump returns a fresh dict; reassign `extracted` to it
+        # so we don't hold two copies. The old parsed dict (and its
+        # nested list[dict]) is freed here. For large `line_items`
+        # arrays this saves O(n) memory.
         validated = validated_obj.model_dump(mode="json")
+        extracted = validated  # noqa: F841 — rebind to drop the original
     except Exception as e:  # noqa: BLE001
         log.debug("schema validation at extract time failed: %s", e)
+        # Schema validation failed — fall back to whatever parsed
+        # (we can't tell the user the doc parsed but the schema
+        # rejected it without showing them what was extracted).
         validated = extracted if isinstance(extracted, dict) else {"_raw": str(extracted)}
         doc.errors.append(f"extract_schema_unvalidated: {e}")
 
@@ -280,12 +294,12 @@ def extract(
     # HITL or retry.
     if raw_had_error:
         doc.errors.append(
-            f"extract_json_parse_failed: {extracted.get('_error')!r}; "
+            f"extract_json_parse_failed: {extracted_error!r}; "
             "extraction is fall-back nulls, do not trust without review"
         )
         # collapse the extraction to an explicit marker so HITL sees red
         if isinstance(validated, dict) and validated and all(v is None for v in validated.values()):
-            validated = {"_parse_failed": True, "_raw": extracted.get("_raw")}
+            validated = {"_parse_failed": True, "_raw": extracted_raw_text}
 
     doc.extraction = validated
     doc.extraction_schema = schema.__name__

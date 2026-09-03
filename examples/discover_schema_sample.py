@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 # Make sure we're using the local checkout
@@ -39,8 +38,8 @@ from idp.pipeline import Pipeline
 
 def make_sample_pdf(path: str = "tmp_sample_invoice.pdf") -> str:
     """Generate a synthetic 2-page invoice PDF using reportlab."""
-    from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
 
     c = canvas.Canvas(path, pagesize=letter)
     c.drawString(72, 750, "ACME WIDGETS INC.")
@@ -213,7 +212,7 @@ def main() -> int:
     extracted = pipeline_result.document.extraction
 
     print(f"    Extracted: {len(extracted)} fields")
-    print(f"    Sample:")
+    print("    Sample:")
     for key in ["vendor_name", "invoice_number", "total_amount", "line_items"]:
         v = extracted.get(key)
         if key == "line_items" and v:

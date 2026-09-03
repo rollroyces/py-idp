@@ -16,9 +16,47 @@ Pages:
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 
-import streamlit as st
+
+def _st_module():
+    """Lazily import streamlit. Returns the module, not a proxy.
+
+    Why lazy: streamlit transitively imports protobuf + 20+ MB of
+    dependencies. Deferring the import means ``import idp.hitl.app``
+    from the CLI / pipeline / tests does NOT pay the cost; only
+    running the UI does.
+
+    Streamlit re-executes the script per session, so the import fires
+    naturally on first widget render.
+    """
+    import streamlit as st_module
+    return st_module
+
+
+# A module-level proxy so the existing ``st.<attr>`` access pattern
+# keeps working without rewriting every line of the UI. The proxy
+# resolves ``_st_module()`` once on first attribute access — and
+# crucially, ``import idp.hitl.app`` never accesses any attribute,
+# so the streamlit import doesn't fire until a widget is rendered.
+class _StreamlitProxy:
+    __slots__ = ("_mod",)
+
+    def __init__(self) -> None:
+        self._mod: object = None
+
+    def __getattr__(self, name: str):
+        if self._mod is None:
+            self._mod = _st_module()
+        return getattr(self._mod, name)
+
+
+# Initialize the proxy. The first attribute access on this triggers the
+# lazy import; until then, importing idp.hitl.app is free of streamlit.
+# Type-checker note: ``st`` has the proxy type so mypy doesn't try to
+# resolve streamlit attribute names; runtime attrs resolve dynamically.
+st: _StreamlitProxy = _StreamlitProxy()  # type: ignore[assignment]
 
 
 # ----------------------------------------------------------------------
@@ -38,11 +76,18 @@ def _parse_args() -> argparse.Namespace:
 _ARGS = _parse_args()
 
 
-@st.cache_resource
+@functools.lru_cache(maxsize=1)
 def get_storage():
-    """Resolve a Storage backend. Cached across reruns."""
-    from idp.storage import make_storage
+    """Resolve a Storage backend. Cached for the lifetime of the script.
 
+    Was previously ``@st.cache_resource`` — switched to ``lru_cache``
+    so the storage resolution does not require streamlit to be
+    imported. This is the key change that lets ``import idp.hitl.app``
+    stay free of streamlit's ~20 MB transitive deps. Functionally
+    equivalent for our use case (Streamlit re-executes the module
+    per session, so caching across reruns is no longer needed).
+    """
+    from idp.storage import make_storage
     return make_storage(
         backend=_ARGS.storage,
         json_path=_ARGS.json_path,
@@ -215,6 +260,7 @@ def main() -> None:
         page_about()
 
 
-# Streamlit always runs the script body; the storage cache decorator
-# means the backend is resolved only once per server lifetime.
-main()
+# Streamlit runs the script as __main__. Gate main() on that to
+# keep `import idp.hitl.app` from accidentally launching the UI.
+if __name__ == "__main__":
+    main()

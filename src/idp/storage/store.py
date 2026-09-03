@@ -123,21 +123,58 @@ class InMemoryStorage(Storage):
 
 
 class JsonFileStorage(Storage):
-    """Line-delimited JSON store on disk. Trivially inspectable, zero-deps."""
+    """Line-delimited JSON store on disk. Trivially inspectable, zero-deps.
+
+    Memory profile: keeps an in-memory cache of the file's parsed
+    StoredResults. Cache is invalidated on ``put()`` and
+    ``mark_reviewed()``. For a file with N entries, peak memory is
+    roughly 2-3× the on-disk JSON size (raw dicts + StoredResult
+    objects + the cache dict itself).
+
+    For workloads with >10k stored results, switch to ``SqlStorage``
+    instead — JSONL doesn't index either and the full-file cache
+    becomes the dominant cost.
+    """
+
+    # Cache invalidation: byte-offset of last file size we read.
+    # If the file has grown (someone wrote outside our lock), drop the cache.
+    _CACHE_FILE_STALE = -1
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(exist_ok=True)
         self._lock = threading.Lock()
+        # In-memory cache: id -> StoredResult
+        self._cache: dict[str, StoredResult] | None = None
+        self._cache_size_bytes: int = self._CACHE_FILE_STALE
+
+    def _cache_valid(self) -> bool:
+        """True iff the cache exists AND the file hasn't changed on disk."""
+        if self._cache is None or self._cache_size_bytes == self._CACHE_FILE_STALE:
+            return False
+        try:
+            current_size = self.path.stat().st_size
+        except FileNotFoundError:
+            return False
+        return current_size == self._cache_size_bytes
+
+    def _invalidate_cache(self) -> None:
+        self._cache = None
+        self._cache_size_bytes = self._CACHE_FILE_STALE
 
     def _read_all(self) -> dict[str, StoredResult]:
-        """Re-read the entire file. Skips corrupt lines (logs a warning).
+        """Return cached entries if valid; otherwise re-read the file.
 
         Crashes during a `put()` (process kill, full disk) can leave a
         partial trailing line. Reading the whole file should never take
         down the app — we skip and continue. Use a real DB for transactions.
         """
+        # Hot path: cache is valid -> return it (no I/O)
+        if self._cache_valid():
+            return self._cache  # type: ignore[return-value]
+
+        # Cold path: re-read the file
         by_id: dict[str, StoredResult] = {}
         with self.path.open() as f:
             for line_no, raw in enumerate(f, start=1):
@@ -152,6 +189,10 @@ class JsonFileStorage(Storage):
                         "skipping corrupt line %d in %s: %s",
                         line_no, self.path, e,
                     )
+
+        # Cache + remember file size at this point
+        self._cache = by_id
+        self._cache_size_bytes = self.path.stat().st_size
         return by_id
 
     def put(self, result: StoredResult) -> str:
@@ -161,6 +202,8 @@ class JsonFileStorage(Storage):
             result.created_at = time.time()
         with self._lock, self.path.open("a") as f:
             f.write(json.dumps(asdict(result), default=str) + "\n")
+        # Cache is now stale; drop it. The next read will rebuild.
+        self._invalidate_cache()
         return result.id
 
     def get(self, result_id: str) -> StoredResult | None:
@@ -211,3 +254,5 @@ class JsonFileStorage(Storage):
         original.last_reviewed_at = _t.time()
         with self._lock, self.path.open("a") as f:
             f.write(json.dumps(asdict(original), default=str) + "\n")
+        # Cache is now stale (the new append could shadow an earlier entry)
+        self._invalidate_cache()
