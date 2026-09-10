@@ -26,6 +26,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from idp.checkpoint import CheckpointEntry, CheckpointStore
 from idp.core.document import Document
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
@@ -78,6 +79,8 @@ def process_batch(
     *,
     progress_every: int = 10,
     on_progress: Callable[[int, int, BatchItemResult], None] | None = None,
+    checkpoint: CheckpointStore | str | None = None,
+    archive_at_start: bool = False,
 ) -> Iterator[BatchItemResult]:
     """Run ``pipeline`` over many documents, yielding a result per item.
 
@@ -95,22 +98,54 @@ def process_batch(
         or ``error`` is set.
 
     Errors are caught and recorded in ``BatchItemResult.error``; the
-    iterator does NOT raise. The caller decides what to do (skip,
-    retry, send to dead-letter queue).
+        iterator does NOT raise. The caller decides what to do (skip,
+        retry, send to dead-letter queue).
+
+    Args:
+        paths:        list or iterator of file paths (local or DBFS/S3
+                      paths supported by ``Document.from_path``).
+        pipeline:     a configured ``Pipeline``. The model (if any) is loaded
+                      on the first call and reused for the rest of the batch.
+        progress_every: log a progress line every N documents. 0 = silent.
+        on_progress:  optional callback ``(i, total, result)`` for custom
+                      reporting (e.g. Databricks widget updates).
+        checkpoint:   optional ``CheckpointStore`` (or path string) for
+                      resume-after-crash. When set:
+                      - On start, paths already in the checkpoint are
+                        SKIPPED — the iterator does NOT yield them.
+                      - After each doc, the result is recorded (success
+                        OR failure), so a crash mid-batch leaves the
+                        ledger consistent.
+                      - Re-running the same batch with the same checkpoint
+                        is IDEMPOTENT: same paths get skipped, only new
+                        paths are processed.
+                      Idempotent resume — no flag needed; just pass the
+                      same checkpoint path on retry. Use ``CheckpointStore.clear()``
+                      if you want to force reprocessing.
+        archive_at_start: when True (default False), if the checkpoint
+                      file already exists with entries, rename it to
+                      ``<path>.<timestamp>.jsonl`` and start a fresh
+                      empty ledger. Use this between production runs
+                      so each run gets a clean checkpoint AND you keep
+                      a history of past runs for debugging. Idempotent
+                      resume DOES NOT use this — it's only for explicit
+                      "fresh batch, new ledger" semantics.
 
     Example (Databricks):
         from idp import Pipeline
         from idp.llm.nanonets import NanonetsVLBackend
         from idp.llm.nanonets_batch import process_batch
+        from idp.checkpoint import CheckpointStore
 
         pipeline = Pipeline(
             backend=NanonetsVLBackend(device="cuda"),
             schema="Invoice",
         )
+        # Idempotent batch — safe to re-run if the job fails mid-way:
         results = process_batch(
             [p.path for p in dbutils.fs.ls("/mnt/invoices/inbox/")],
             pipeline,
-            progress_every=10,
+            checkpoint="/dbfs/mnt/idp/checkpoints/inbox.jsonl",
         )
         for r in results:
             if r.ok:
@@ -118,6 +153,18 @@ def process_batch(
             else:
                 log.error(f"Failed: {r.path}: {r.error}")
     """
+    # Resolve checkpoint store (lazy construction from string or Path)
+    cp: CheckpointStore | None = None
+    if checkpoint is not None:
+        cp = checkpoint if isinstance(checkpoint, CheckpointStore) else CheckpointStore(checkpoint)
+        if archive_at_start:
+            archived = cp.archive()
+            if archived is not None:
+                log.info(
+                    "checkpoint: archived previous run to %s; starting fresh",
+                    archived,
+                )
+
     if isinstance(paths, list):
         paths_iter: Iterator[str] = iter(paths)
         total = len(paths)
@@ -126,6 +173,10 @@ def process_batch(
         total = None  # unknown for iterators
 
     for i, path in enumerate(paths_iter, start=1):
+        # Idempotent resume: skip paths already in the checkpoint.
+        if cp is not None and path in cp:
+            log.info("checkpoint: skipping already-done path %s", path)
+            continue
         t0 = time.perf_counter()
         try:
             doc = Document.from_path(path)
@@ -142,6 +193,27 @@ def process_batch(
                 error=f"{type(e).__name__}: {e}",
                 elapsed_seconds=time.perf_counter() - t0,
             )
+        # Record the outcome BEFORE yielding so a crash between
+        # process() and write_to_delta() doesn't lose this doc's state.
+        if cp is not None:
+            try:
+                entry_result = (
+                    item.result.document.extraction
+                    if (item.result is not None and item.result.document.extraction)
+                    else None
+                )
+                cp.record(CheckpointEntry(
+                    path=item.path,
+                    ok=item.ok,
+                    error=item.error,
+                    result=entry_result,
+                    elapsed_seconds=item.elapsed_seconds,
+                ))
+            except Exception as e:  # noqa: BLE001
+                # Don't let a checkpoint write failure kill the batch —
+                # the user can always retry; the only cost is reprocessing
+                # the docs that didn't get recorded.
+                log.warning("checkpoint: failed to record %s: %s", item.path, e)
         if progress_every and i % progress_every == 0 and total:
             log.info("Batch progress: %d / %d (%.1f%%)",
                      i, total, 100 * i / total)
