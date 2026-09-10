@@ -1,0 +1,21 @@
+name: Question
+description: Usage question, "how do I…", or design discussion.
+title: "[question] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      placeholder: |
+        What's the best way to do X with py-idp?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What I've already tried
+      description: |
+        Link to docs you read, code snippets you tried, similar
+        issues you checked. Saves a round-trip.

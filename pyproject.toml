@@ -10,7 +10,20 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "Royce" }]
-keywords = ["idp", "document-ai", "ocr", "llm", "extraction", "pydantic", "multimodal"]
+keywords = [
+    "intelligent-document-processing",
+    "document-ai",
+    "ocr",
+    "llm",
+    "extraction",
+    "pydantic",
+    "multimodal",
+    "rag",
+    "information-extraction",
+    "invoice",
+    "pdf",
+    "schema-discovery",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
