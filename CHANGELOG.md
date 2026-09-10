@@ -5,7 +5,7 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
-## Unreleased — discoverability & release-engineering pass
+## [0.3.1] — 2026-09-10 — Discoverability & pre-existing-bug pass
 
 ### Added
 
@@ -28,6 +28,25 @@ the third on bugfixes.
 * pyproject keywords expanded to cover `rag`, `multimodal`,
   `information-extraction`, `intelligent-document-processing` so
   `pip search` and GitHub topic graph pick the project up.
+
+### Fixed
+
+* `tiktoken` is now a real `[project] dependency` (was promised by
+  the README but never declared; fresh installs and CI failed with
+  `ModuleNotFoundError` on `idp.chunker.TokenChunker`).
+* New `[pdf-render]` extra (`pdf2image`, `Pillow`) for the multimodal
+  path (`PdfPagesParser`, `NanonetsVLBackend`); declared in
+  `pyproject.toml`, installed by CI.
+* `.github/workflows/tests.yml` install line now uses
+  `.[dev,eval,api,pdf-render]` so `test_security_adversarial.py`
+  collects cleanly.
+* Six test files no longer hard-code `/Users/hermes/py-idp/...` as
+  the repo path; they derive `REPO` from `Path(__file__)`. Tests now
+  pass on any machine, not just the author's.
+* `PolicyCache.flush_now()` race with the background flusher: a
+  caller that flushes synchronously and then reads the policy file
+  can no longer observe a stray `.tmp` because the flusher re-checks
+  `_dirty.is_set()` inside the lock and skips no-op writes.
 
 ## [0.3.0] — 2026-09-02 — Self-hosted VLM backend
 
