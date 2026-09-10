@@ -490,8 +490,10 @@ def _stub(
     # 2. resolve $ref against the $defs registry
     if "$ref" in schema:
         ref = schema["$ref"]
-        # JSON-Pointers of the form "#/$defs/Foo"
-        if ref.startswith("#/$defs/"):
+        # JSON-Pointers of the form "#/$defs/Foo". Hypothesis-generated
+        # garbage inputs may give us a non-string ref (e.g. int 0), so
+        # defensively coerce.
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
             name = ref.split("/")[-1]
             target = defs.get(name)
             if target is not None:

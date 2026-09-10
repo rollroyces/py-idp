@@ -147,3 +147,27 @@ def test_stub_handles_nested_garbage():
     # 'a' is int — _stub recurses on it (returns 0.0 for number type);
     # 'b' is string — returns "" for string type. Should not crash.
     assert isinstance(out, dict)
+
+
+# ---------------------------------------------------------------------------
+# Regression: $ref with non-string values (Hypothesis-generated garbage)
+# ---------------------------------------------------------------------------
+def test_stub_handles_non_string_ref():
+    """Schema with '$ref': 0 (int) used to crash _stub() with AttributeError.
+
+    Defensive coercion: the bad ref returns None (per existing contract
+    for unresolvable refs) instead of crashing.
+    """
+    from idp.llm.backend import _stub
+    out = _stub({"$ref": 0})
+    # The fix: don't crash. Returns None because the int ref isn't a
+    # valid "#/$defs/Foo" pointer.
+    assert out is None
+
+
+def test_stub_handles_ref_without_defs_prefix():
+    """Schema with '$ref': 'not-a-pointer' falls back to None."""
+    from idp.llm.backend import _stub
+    out = _stub({"$ref": "not-a-pointer"})
+    # Malformed refs return None (per existing contract).
+    assert out is None
