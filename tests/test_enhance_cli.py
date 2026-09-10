@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
-REPO = "/Users/hermes/py-idp"
+REPO = str(Path(__file__).resolve().parents[1])
 CLI = [sys.executable, "-m", "idp.pipeline.cli"]
 INVOICE = f"{REPO}/src/idp/eval/datasets/invoices/docs/inv-001.txt"
 DATASET = f"{REPO}/src/idp/eval/datasets/invoices"
