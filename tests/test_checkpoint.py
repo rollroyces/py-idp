@@ -433,7 +433,6 @@ def test_record_does_not_silently_silently_retry_unlocked(tmp_path, monkeypatch)
     """The fallback 'unlocked write' path has been removed — record() raises."""
     # Simulate flock raising by making fcntl.flock raise
     import fcntl as _fcntl
-    original_flock = _fcntl.flock
 
     def raising_flock(fd, op):
         raise OSError("simulated flock failure")
@@ -600,7 +599,7 @@ def test_process_batch_archive_at_start(tmp_path):
     pipeline.run = MagicMock(return_value=_make_pipeline_result_success())
 
     paths = [str(pdf)]
-    results = list(process_batch(
+    list(process_batch(
         paths, pipeline, progress_every=0,
         checkpoint=cp_path, archive_at_start=True,
     ))

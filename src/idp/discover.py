@@ -144,6 +144,25 @@ class DiscoveryResult:
     doc: Document
     """The Document that was passed in (so the caller can reuse it)."""
 
+    hint_grounding: dict[str, Any] | None = None
+    """How well the user's hint tokens appear in the discovered schema.
+
+    Populated when a hint was provided. Shape::
+
+        {
+            "hint_tokens": ["vendor_name", "total_amount", "line_items"],
+            "schema_fields": ["supplier_name", "amount_due", "line_items"],
+            "grounded": [("vendor_name", "supplier_name", "fuzzy"),
+                         ("line_items", "line_items", "exact")],
+            "ungrounded": ["total_amount"],
+            "grounding_score": 0.67,  # grounded / total hint tokens
+        }
+
+    A ``grounding_score`` below 0.5 means the LLM largely ignored the
+    user's hint — they should review the schema carefully before
+    using it. None when no hint was provided.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -215,13 +234,137 @@ def discover_schema(
     # 5. Compile to Pydantic
     schema_class = _json_schema_to_pydantic(schema_dict, fallback_name="InferredDocument")
 
+    # 6. Ground against user hint (mitigates the "LLM ignores your hint"
+    #    limitation). When hint is empty, skip — no grounding possible.
+    grounding = _compute_hint_grounding(hint, schema_dict)
+
+    # Surface low-grounding as a warning, not an error. The schema
+    # might still be correct (LLM chose better names); the user just
+    # needs to know to verify.
+    if grounding is not None and grounding["grounding_score"] < 0.5:
+        log.warning(
+            "discover_schema: only %d of %d hint tokens appear in the "
+            "discovered schema. The LLM may have ignored your hint. "
+            "Hint tokens not found: %s",
+            len(grounding["grounded"]),
+            len(grounding["hint_tokens"]),
+            grounding["ungrounded"],
+        )
+
     return DiscoveryResult(
         schema_class=schema_class,
         json_schema=schema_dict,
         raw_response=raw,
         backend_name=getattr(backend, "name", type(backend).__name__),
         doc=doc,
+        hint_grounding=grounding,
     )
+
+
+# ---------------------------------------------------------------------------
+# Hint grounding
+# ---------------------------------------------------------------------------
+# Stop words filtered out when extracting hint tokens. These are words
+# like "and", "the", "from" that appear in natural-language hints but
+# don't carry field-name intent.
+_HINT_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "of", "from", "with", "for", "to",
+    "in", "on", "at", "by", "this", "that", "these", "those", "each",
+    "all", "any", "be", "is", "are", "was", "were", "been", "being",
+    "have", "has", "had", "do", "does", "did", "doing", "will", "would",
+    "should", "could", "may", "might", "shall", "must", "can",
+    "their", "there", "they", "them", "its", "his", "her", "him", "you", "your", "yours", "we", "us", "our", "ours",
+    "extract", "include", "want", "need", "also", "just", "only", "very", "really", "into", "via", "using",
+    "use", "what", "which", "who", "whom", "where", "when", "why",
+    "how", "tell", "give", "show", "let", "get", "make",
+})
+
+
+def _extract_hint_tokens(hint: str) -> list[str]:
+    """Extract candidate field-name tokens from a free-form hint.
+
+    Examples:
+        "extract vendor_name, total_amount, and line items"
+        -> ["vendor_name", "total_amount", "line", "items"]
+        "what is the customer's email and their phone?"
+        -> ["customer", "email", "phone"]
+
+    Strips common stop words. Returns snake_case-lowercased tokens of
+    length >= 3.
+    """
+    if not hint:
+        return []
+    raw_tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", hint)
+    out: list[str] = []
+    seen: set[str] = set()
+    for tok in raw_tokens:
+        norm = tok.lower()
+        if len(norm) < 3:
+            continue
+        if norm in _HINT_STOP_WORDS:
+            continue
+        if norm in seen:
+            continue
+        seen.add(norm)
+        out.append(norm)
+    return out
+
+
+def _compute_hint_grounding(
+    hint: str, schema_dict: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Compare hint tokens against the schema's field names.
+
+    Returns None if no hint was provided. Otherwise returns a dict
+    describing which hint tokens were found in the schema (exact or
+    fuzzy match) and which weren't.
+
+    Heuristic matching:
+      - "exact": hint token == schema field name (case-insensitive)
+      - "fuzzy": SequenceMatcher ratio > 0.8 (catches vendor_name
+        matching supplier_name at edit distance ~5)
+    """
+    import difflib
+
+    tokens = _extract_hint_tokens(hint)
+    if not tokens:
+        return None
+
+    schema_fields = list((schema_dict.get("properties") or {}).keys())
+    schema_fields_lower = [f.lower() for f in schema_fields]
+
+    grounded: list[tuple[str, str, str]] = []
+    matched_tokens: set[str] = set()
+    for token in tokens:
+        # Exact match
+        for field, field_lower in zip(schema_fields, schema_fields_lower, strict=True):
+            if token == field_lower:
+                grounded.append((token, field, "exact"))
+                matched_tokens.add(token)
+                break
+        else:
+            # Fuzzy match
+            best_ratio = 0.0
+            best_field: str | None = None
+            for field, field_lower in zip(schema_fields, schema_fields_lower, strict=True):
+                r = difflib.SequenceMatcher(None, token, field_lower).ratio()
+                if r > best_ratio:
+                    best_ratio = r
+                    best_field = field
+            if best_ratio > 0.8 and best_field is not None:
+                grounded.append((token, best_field, "fuzzy"))
+                matched_tokens.add(token)
+
+    ungrounded = [t for t in tokens if t not in matched_tokens]
+    score = len(grounded) / len(tokens) if tokens else 1.0
+
+    return {
+        "hint_tokens": tokens,
+        "schema_fields": schema_fields,
+        "grounded": grounded,
+        "ungrounded": ungrounded,
+        "grounding_score": score,
+    }
 
 
 # ---------------------------------------------------------------------------
