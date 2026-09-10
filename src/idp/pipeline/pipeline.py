@@ -36,6 +36,12 @@ from idp.extract import extract
 from idp.llm.backend import Backend, get_backend
 from idp.parse import choose_mode, parse_document
 from idp.parse.parser import get_parser
+from idp.reliability import (
+    CachingBackend,
+    ExtractionCache,
+    RetryConfig,
+    RetryingBackend,
+)
 from idp.validate import validate
 from idp.validate.validator import BusinessRule
 
@@ -92,12 +98,32 @@ class Pipeline:
         business_rules: list[BusinessRule] | None = None,
         policy: PolicyConfig | None = None,
         policy_path: str | None = None,
+        retry: RetryConfig | bool = False,
+        cache: ExtractionCache | bool = False,
     ):
-        # resolve objects if the caller passed names
+        # Resolve backend to a real object first, then optionally wrap it
+        # with retry + cache. We wrap lazily (not at construction) so the
+        # caller can still see the original backend for debugging, but the
+        # wrapped one is what gets called inside the pipeline.
         if isinstance(backend, str):
             backend = get_backend(backend)
-        self.backend = backend
-        self.backend_name = getattr(backend, "name", "unknown")
+        # Save the "logical" name (before wrapping) for cache keying
+        _logical_backend_name = getattr(backend, "name", "unknown")
+        # Retry wrapper
+        if retry is True:
+            retry = RetryConfig()
+        if isinstance(retry, RetryConfig):
+            backend = RetryingBackend(backend, retry)  # type: ignore[assignment]
+        # Cache wrapper (applied AFTER retry so cached hits skip retries)
+        if cache is True:
+            cache = ExtractionCache(
+                str(Path.home() / ".cache" / "idp" / "extract.db")
+            )
+        if isinstance(cache, ExtractionCache):
+            # Need schema_name; resolve it first by getting the schema
+            pass  # done after self.schema is set
+        self.backend: Backend = backend  # type: ignore[assignment]
+        self.backend_name = getattr(backend, "name", _logical_backend_name)
         if isinstance(schema, str):
             from idp.core.schemas import get_schema
 
@@ -106,6 +132,14 @@ class Pipeline:
         else:
             self.schema = schema
             self.schema_name = schema.__name__
+        # Now that schema_name is known, wrap with cache if requested.
+        # We re-wrap because CachingBackend requires schema_name.
+        if isinstance(cache, ExtractionCache):
+            self.backend = CachingBackend(
+                backend, cache, schema_name=self.schema_name
+            )  # type: ignore[assignment]
+            self.backend_name = self.backend.name
+        self.cache = cache if isinstance(cache, ExtractionCache) else None
         self.parser = parser  # resolved lazily inside run() once we have a Document
         self.parser_name = parser if isinstance(parser, str) else None
         self.use_llm_confidence = use_llm_confidence
