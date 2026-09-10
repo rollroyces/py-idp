@@ -105,6 +105,11 @@ class PolicyCache:
             self._pending = []
             self._merge_locked(pending)
             self._write_locked()
+        # Clear the dirty flag so the background flusher doesn't immediately
+        # re-fire on its next wakeup and leave a redundant .tmp behind.
+        # (Without this, a caller that does flush_now() then reads the policy
+        # file can race with the flusher and see a stray .tmp.)
+        self._dirty.clear()
 
     def stop(self) -> None:
         self._stop.set()
