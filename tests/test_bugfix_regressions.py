@@ -23,6 +23,12 @@ from idp.llm.backend import (
 )
 from idp.storage.store import JsonFileStorage
 
+# Path constants derived from this file's location so the tests are
+# portable across machines and CI (not all checkouts live at /Users/hermes/py-idp).
+REPO = Path(__file__).resolve().parents[1]
+SAMPLE_DOC = REPO / "src/idp/eval/datasets/invoices/docs/inv-001.txt"
+SRC_ROOT = REPO / "src/idp"
+
 
 # ---------------------------------------------------------------------------
 # B1: _safe_json must not crash on empty / null input
@@ -261,7 +267,7 @@ def test_end_to_end_pipeline_still_passes():
 
     p = Pipeline(backend="mock", schema=Invoice)
     doc = Document.from_path(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices/docs/inv-001.txt"
+        str(SAMPLE_DOC)
     )
     res = p.run(doc)
     assert res.classification == "invoice"
@@ -274,7 +280,7 @@ def test_pipeline_garbage_backend_propagates_error_not_silent_pass():
 
     p = Pipeline(backend=AlwaysGarbageBackend(), schema=Invoice)
     doc = Document.from_path(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices/docs/inv-001.txt"
+        str(SAMPLE_DOC)
     )
     res = p.run(doc)
     # extraction must contain an error marker
@@ -293,7 +299,7 @@ def test_b15_no_duplicate_top_level_imports():
     are allowed (and intentional)."""
     import re
     bad = []
-    for f in Path("/Users/hermes/py-idp/src/idp").rglob("*.py"):
+    for f in SRC_ROOT.rglob("*.py"):
         text = f.read_text()
         # ONLY column-0 (top-level) imports — exclude indented function-scope
         top_imports = [
@@ -304,7 +310,7 @@ def test_b15_no_duplicate_top_level_imports():
         from collections import Counter
         for mod, count in Counter(top_imports).items():
             if count > 1:
-                bad.append((f.relative_to(Path("/Users/hermes/py-idp")), mod, count))
+                bad.append((f.relative_to(REPO), mod, count))
     assert bad == [], f"duplicate top-level imports: {bad}"
 
 
