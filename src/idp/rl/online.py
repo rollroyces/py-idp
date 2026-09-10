@@ -101,10 +101,19 @@ class PolicyCache:
     def flush_now(self) -> None:
         """Synchronously fold pending reviews into policy + write to disk."""
         with self._lock:
+            if not self._dirty.is_set() and not self._pending:
+                # Nothing to do — don't touch the disk unnecessarily. This also
+                # means callers (and tests) that flush_now() then read the
+                # policy file won't see a transient .tmp from a no-op write.
+                return
             pending = self._pending
             self._pending = []
             self._merge_locked(pending)
             self._write_locked()
+            # Clear the dirty flag under the same lock so the background
+            # flusher cannot observe a stale 'set' between our write and
+            # the clear (which would let it fire a redundant write).
+            self._dirty.clear()
 
     def stop(self) -> None:
         self._stop.set()
@@ -115,16 +124,31 @@ class PolicyCache:
 
     # ---- Internals ----
     def _flush_loop(self) -> None:
+        # Two conditions must hold for the flusher to actually write:
+        #   1. _dirty is set at the moment we check (not just during the wait)
+        #   2. we hold _lock long enough to atomically read _dirty AND clear it
+        # `Event.wait(timeout)` alone is racy: it returns True if the event
+        # was set during the wait even if it was cleared again before we got
+        # here. So we always re-check inside the lock and only flush then.
         while not self._stop.is_set():
             triggered = self._dirty.wait(timeout=self.flush_interval_sec)
             if self._stop.is_set():
                 break
-            if triggered:
+            if not triggered:
+                continue
+            with self._lock:
+                # Re-check inside the lock: a concurrent flush_now() may have
+                # already drained everything.
+                if not self._dirty.is_set():
+                    continue
                 try:
-                    self.flush_now()
+                    pending = self._pending
+                    self._pending = []
+                    self._merge_locked(pending)
+                    self._write_locked()
+                    self._dirty.clear()
                 except Exception as e:  # noqa: BLE001
                     log.warning("policy flush failed: %s", e)
-                self._dirty.clear()
 
     def _merge_locked(self, pending: list[ReviewRewards]) -> None:
         for r in pending:
