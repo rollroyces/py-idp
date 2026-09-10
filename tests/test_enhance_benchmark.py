@@ -18,7 +18,8 @@ from idp.llm.backend import MockBackend
 from idp.parse.parser import PlainTextParser, parse_document
 from idp.validate import validate
 
-SAMPLE = Path("/Users/hermes/py-idp/src/idp/eval/datasets/invoices/docs/inv-001.txt")
+REPO = Path(__file__).resolve().parents[1]
+SAMPLE = REPO / "src/idp/eval/datasets/invoices/docs/inv-001.txt"
 
 
 def test_bench_plain_text_parse(benchmark):

@@ -57,6 +57,10 @@ api = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
 # China LLM providers (OpenAI-compatible; no extra deps required — uses httpx)
 # The `openai` SDK is optional; install it if you prefer the SDK client to raw HTTP.
 china = ["openai>=1.30"]
+# PDF-to-image rendering for multimodal backends (PdfPagesParser + NanonetsVLBackend).
+# Pillow is used for image preprocessing; pdf2image requires poppler-utils at runtime
+# (apt install poppler-utils / brew install poppler).
+pdf-render = ["pdf2image>=1.16", "Pillow>=10.0"]
 # Evaluation
 eval = ["datasets>=2.18", "pandas>=2.1"]
 dev = [

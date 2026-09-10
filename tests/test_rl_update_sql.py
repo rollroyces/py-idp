@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
+
+REPO = str(Path(__file__).resolve().parents[1])
 
 
 def test_update_policy_from_sql_end_to_end(tmp_path):
@@ -59,7 +62,7 @@ def test_cli_rl_update_db_url_flag(tmp_path):
             "--output", str(policy_path),
         ],
         capture_output=True, text=True,
-        cwd="/Users/hermes/py-idp",
+        cwd=REPO,
     )
     assert r.returncode == 0, f"CLI failed:\nSTDOUT={r.stdout}\nSTDERR={r.stderr}"
     assert policy_path.exists()
