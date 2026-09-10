@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in py-idp produced wrong output, crashed, or behaved unexpectedly.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more detail you
+        give, the faster I can reproduce and fix it.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      placeholder: |
+        A clear, one-paragraph description. What did you expect to happen,
+        and what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        The smallest script or snippet that triggers the bug.
+        If the bug requires a specific document, say what kind
+        (PDF / image / format) and ideally attach a redacted sample.
+      render: python
+      placeholder: |
+        from idp import Document, Pipeline
+        result = Pipeline(backend="mock", schema="Invoice").run(
+            Document.from_path("invoice.pdf")
+        )
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: py-idp version
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Python / OS / backend
+      placeholder: "Python 3.11.6, macOS 14.4, backend=openai (gpt-4o)"
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Traceback / error output
+      render: text

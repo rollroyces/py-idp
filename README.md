@@ -8,8 +8,11 @@
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-399_passing-brightgreen.svg)](#development)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](#)
+[![CI](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml/badge.svg)](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/py-idp)](https://pypi.org/project/py-idp/)
+[![Downloads](https://img.shields.io/pypi/dm/py-idp)](https://pypistats.org/packages/py-idp)
+[![GitHub stars](https://img.shields.io/github/stars/rollroyces/py-idp)](https://github.com/rollroyces/py-idp/stargazers)
+[![Cite this repository](https://img.shields.io/badge/Cite-CITATION.cff-blue)](CITATION.cff)
 
 ---
 
@@ -536,7 +539,7 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 399 tests, no API key needed
+pytest -v                       # 458 tests, no API key needed
 ruff check src tests examples   # lint
 mypy src/idp                    # type-check (clean across 56 files)
 
@@ -547,6 +550,32 @@ python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scena
 ```
 
 `import idp; idp.__version__` → `0.3.0`.
+
+---
+
+## Security
+
+Found a vulnerability? See [`docs/SECURITY.md`](docs/SECURITY.md) — please
+**do not** file it as a public issue.
+
+---
+
+## Citing
+
+If py-idp helped your research or product, the academic citation lives
+in [`CITATION.cff`](CITATION.cff). The BibTeX export is one click on the
+GitHub sidebar ("Cite this repository").
+
+---
+
+## Contributing
+
+Issues, PRs, and Discussions are welcome. The full guide — including
+how to add a new LLM backend or schema, commit-message conventions, and
+the release flow — lives in [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug
+reports do best with a minimal reproduction script and your `py-idp`
+version. CI runs ruff + mypy + 458 tests across Python 3.10 / 3.11 /
+3.12 on every PR.
 
 ---
 

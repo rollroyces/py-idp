@@ -1,7 +1,7 @@
 """End-to-end sample test for discover_schema.
 
 Run with:
-    cd /Users/hermes/py-idp
+    cd <path-to-py-idp-checkout>
     .venv/bin/python examples/discover_schema_sample.py
 
 This script demonstrates the full discover_schema flow:
