@@ -1,0 +1,18 @@
+CORD-style receipt: restaurant bill with tip
+Date: 2024-11-22
+Time: 20:15
+
+Trattoria Marcello
+417 Bleecker Street
+
+2  Cacio e pepe         $24.00
+1  Branzino             $38.00
+1  House red, glass      $14.00
+1  Tiramisu             $12.00
+
+Subtotal             $88.00
+Tax (8.875%)          $7.81
+Tip (20%)            $17.60
+Total               $113.41
+
+Amex ****1009

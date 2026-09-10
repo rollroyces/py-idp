@@ -1,0 +1,18 @@
+CORD-style receipt: grocery
+Date: 2025-02-09
+Time: 14:07
+
+Whole Foods Market
+238 Bedford Ave, Brooklyn
+
+3  Banana (organic)     $2.07
+1  Avocado              $2.50
+2  Sourdough loaf       $9.00
+1  Olive oil 500ml     $14.99
+1  Almond butter       $11.49
+
+Subtotal             $40.05
+Tax                   $3.49
+Total                $43.54
+
+Visa ****7711

@@ -1,0 +1,17 @@
+CORD-style receipt: convenience store, partial OCR
+DaTe: 2025-O1-O5
+TIME: l8:33
+
+7-Eleven #33211
+Mott St & Houston
+
+l  Sandwich              $6.49
+l  Coffee lg             $3.29
+l  Banana                $0.79
+l  Gum                   $1.99
+
+SuBTotAL              $12.56
+TAX                    $1.02
+TOTAL                 $13.58
+
+Cash

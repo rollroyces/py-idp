@@ -5,6 +5,8 @@
 > 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
 > **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B. AI-driven schema discovery.**
 
+**Languages:** [English](README.md) · [简体中文](README.zh-CN.md)
+
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -423,6 +425,21 @@ Two built-ins ship; define your own by writing a `(dict) -> (bool, str | None)` 
 
 ---
 
+## Demo
+
+A live end-to-end run on the in-tree sample invoice (MockBackend — no API key):
+
+![py-idp pipeline running on a sample invoice](docs/assets/demo-pipeline.svg)
+
+The same extraction viewed through the Streamlit HITL review UI:
+
+![Streamlit HITL review UI](docs/assets/demo-hitl.svg)
+
+(The SVGs above are illustrative mockups. For real screen recordings, run
+`idp run path/to/your-invoice.pdf --backend ollama` and `idp serve`.)
+
+---
+
 ## Eval harness
 
 Honest extraction claims need labeled data and side-by-side backend comparison. `py-idp` ships both.
@@ -432,7 +449,17 @@ idp eval --dataset src/idp/eval/datasets/invoices \
          --strategy mock,mock-omits,ollama --output results.json
 ```
 
-Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **latency**. The in-tree fixtures (3 invoices, 2 contracts) are hand-labeled so you can publish numbers you actually verified.
+Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **latency**. The in-tree fixtures (3 invoices, 2 contracts, 5 CORD-style receipts) are hand-labeled so you can publish numbers you actually verified.
+
+### CORD-style receipt benchmark
+
+A 5-receipt hand-curated subset modeled on the [CORD: Consolidated Receipt Dataset](https://github.com/clovaai/cord) lives at `src/idp/eval/datasets/cord_subset/`. Run it with:
+
+```bash
+python examples/benchmark_cord.py
+```
+
+This runs the in-tree MockBackend against all 5 receipts and prints per-field precision / recall / F1 plus latency. **No API key needed** — the numbers are reproducible by anyone with `pip install py-idp[eval]`. To benchmark a real backend, swap `"mock"` for `"ollama"` / `"openai"` / `"anthropic"` / `"china:qwen"` in `examples/benchmark_cord.py`.
 
 ---
 
