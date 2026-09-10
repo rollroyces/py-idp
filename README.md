@@ -5,7 +5,7 @@
 > 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
 > **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B. AI-driven schema discovery.**
 
-**Languages:** [English](README.md) · [简体中文](README.zh-CN.md)
+**Languages:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
@@ -661,9 +661,9 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 458 tests, no API key needed
+pytest -v                       # 508 tests, no API key needed
 ruff check src tests examples   # lint
-mypy src/idp                    # type-check (clean across 56 files)
+mypy src/idp                    # type-check (clean across 59 files)
 
 python -m examples.invoice      # end-to-end demo (no API key needed)
 python -m examples.nanonets_ocr2  # NanonetsVLBackend end-to-end (needs IDP_ENABLE_NANONETS=1)
@@ -696,7 +696,7 @@ Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
 the release flow — lives in [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
-version. CI runs ruff + mypy + 506 tests across Python 3.10 / 3.11 /
+version. CI runs ruff + mypy + 508 tests across Python 3.10 / 3.11 /
 3.12 on every PR.
 
 ---
