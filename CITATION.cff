@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: >-
+  If you use py-idp in academic work, please cite it using the metadata
+  below. The pipeline architecture (parse → classify → extract → assess
+  → validate → HITL) is inspired by the AWS Solutions Library sample
+  on accelerated intelligent document processing; PDF parsing wraps
+  IBM Docling (arXiv:2408.09869).
+type: software
+title: "py-idp"
+version: 0.3.0
+date-released: 2026-09-10
+license: AGPL-3.0-or-later
+license-url: https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL
+url: "https://github.com/rollroyces/py-idp"
+repository-code: "https://github.com/rollroyces/py-idp"
+keywords:
+  - intelligent-document-processing
+  - ocr
+  - document-extraction
+  - llm
+  - multimodal
+  - pydantic
+  - rag
+  - information-extraction
+authors:
+  - family-names: "Yao"
+    given-names: "Royce"
+    alias: "rollroyces"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+preferred-citation:
+  type: software
+  title: "py-idp: a general-purpose, AI-enabled Intelligent Document Processing framework for Python"
+  authors:
+    - family-names: "Yao"
+      given-names: "Royce"
+      alias: "rollroyces"
+  year: 2026
+  url: "https://github.com/rollroyces/py-idp"
+  version: 0.3.0

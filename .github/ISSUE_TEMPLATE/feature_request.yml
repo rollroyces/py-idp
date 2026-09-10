@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an enhancement to py-idp — a new backend, schema, pipeline stage, or CLI flag.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening, please check existing issues and the
+        [roadmap in CHANGELOG.md](https://github.com/rollroyces/py-idp/blob/main/CHANGELOG.md)
+        — this might already be planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      placeholder: |
+        Describe the workflow or pain point. "I want to extract
+        table X from PDF Y but currently have to do Z by hand."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the API or behavior you'd like to see.
+      placeholder: |
+        result = Pipeline(backend="...", schema="...").run(doc, new_flag=...)
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        What workarounds are you using today? Other libraries that
+        solve this? Why is py-idp the right home for it?

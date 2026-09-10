@@ -5,6 +5,30 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## Unreleased — discoverability & release-engineering pass
+
+### Added
+
+* `CITATION.cff` — GitHub now shows a "Cite this repository" button and
+  surfaces py-idp in academic dependency graphs.
+* `docs/SECURITY.md` — supported-versions table, private reporting
+  channel, scope, and a 72 h / 14 d SLA for critical issues. Surfaces
+  the GitHub Security tab and enables private vulnerability reports.
+* `.github/ISSUE_TEMPLATE/{bug_report,feature_request,question}.yml`
+  — structured intake; first-time contributors get the right fields
+  on the first try.
+
+### Changed
+
+* README badge row now links to live targets: CI to the Actions page,
+  PyPI/downloads to the package stats, stars to the stargazers page,
+  plus a `Cite this repository` badge for `CITATION.cff`.
+* New README sections: **Security**, **Citing**, **Contributing** —
+  each links to the corresponding repo file.
+* pyproject keywords expanded to cover `rag`, `multimodal`,
+  `information-extraction`, `intelligent-document-processing` so
+  `pip search` and GitHub topic graph pick the project up.
+
 ## [0.3.0] — 2026-09-02 — Self-hosted VLM backend
 
 ### Added
