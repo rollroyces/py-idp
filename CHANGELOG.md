@@ -5,6 +5,70 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.2] — 2026-09-10 — Reliability, performance, observability, schema discovery
+
+### Added
+
+* **`Pipeline(retry=...)`** — `RetryingBackend` wraps any Backend with
+  exponential-backoff retries on transient errors. Defaults: 4 attempts,
+  1s → 2s → 4s → 8s with ±20% jitter, capped at 30s. Auth and bad-request
+  errors fail fast. See `idp.reliability.RetryConfig`.
+* **`Pipeline(cache=...)`** — `ExtractionCache` is a disk-backed SQLite
+  cache keyed by sha256 of `(schema_name, backend_name, request)`. Same
+  input → no LLM call. Default location `~/.cache/idp/extract.db`.
+  `cache.stats()` returns entries, total_hits, per-schema breakdown.
+  See `idp.reliability.ExtractionCache`.
+* **`Pipeline(cache=True, retry=True)` composes** — cache is applied
+  AFTER retry so cached hits skip the retry loop entirely.
+* **`process_batch(checkpoint=...)`** — `CheckpointStore` is an
+  append-only JSONL ledger of processed paths. Re-running with the same
+  checkpoint path skips already-done paths (idempotent). The
+  `record()` method holds an `flock` across write+flush+fsync for
+  crash-safe single-line appends. `archive_at_start=True` rotates the
+  ledger between runs (timestamped backup file). See `idp.checkpoint`.
+* **`discover_schema` — hint grounding** — `DiscoveryResult.hint_grounding`
+  is a new dict with `hint_tokens`, `schema_fields`, `grounded`
+  (list of `(hint_token, schema_field, "exact"|"fuzzy")` triples),
+  `ungrounded`, and `grounding_score` (0.0 = none of your hint tokens
+  appear, 1.0 = perfect match). When the score is below 0.5, a
+  warning is logged listing the ungrounded hint tokens. Doesn't fix
+  wrong field names — makes the wrongness observable so you know to
+  verify.
+* **`@lru_cache`-cached schema serialization** for `_build_messages()`
+  in `extract.py`. The JSON Schema dump for a Pydantic class is
+  cached per-class; only fields the LLM needs to produce output
+  (type/description/items/enum/format/required) are sent, dropping
+  `$defs`, `additionalProperties`, and other verbose fields. Measured
+  ~75-80% reduction on built-in schemas (Invoice 785 → 169 tokens).
+  For a 20-field custom schema, ~21K tokens of schema overhead per
+  13-chunk document is paid ONCE instead of N times.
+* **Token-aware text truncation** (`_truncate_to_tokens`) replaces
+  `text[:N_CHARS]` with `tiktoken`-based exact-token truncation.
+  Avoids silent budget overshoot on dense text (numbers, currency,
+  base64) where chars ~= tokens.
+* **RAM optimizations**: lazy streamlit import in `idp.hitl.app`
+  (saves ~20 MB of protobuf etc. when importing the package without
+  running the UI), `JsonFileStorage` in-memory cache (saves ~40 MB of
+  re-parsing on long batch reads), and intermediate-string cleanup
+  in `extract()`.
+
+### Changed
+
+* `MockBackend` reports `is_multimodal=True` so it works in any
+  multimodal pipeline without code changes.
+* CLI defaults to Nanonets backend when `IDP_ENABLE_NANONETS=1`;
+  explicit CLI error if not set.
+
+### Fixed
+
+* `_stub()` in `llm.backend` previously crashed on malformed JSON
+  Schema inputs like `{'properties': 0}` (int instead of dict). Now
+  defensive: falls back to returning the raw schema when no
+  recognizable structure is found. Caught by Hypothesis property
+  tests.
+* `MockBackend` can now be passed directly to `Pipeline(schema=...)`
+  via `Pipeline(backend="mock")` — was returning `None` for `is_multimodal`.
+
 ## [0.3.1] — 2026-09-10 — Discoverability & pre-existing-bug pass
 
 ### Added

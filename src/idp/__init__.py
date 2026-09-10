@@ -27,7 +27,7 @@ from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __all__ = [
     "Block",
     "DiscoveryResult",

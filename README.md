@@ -322,11 +322,30 @@ idp discover-schema scan.pdf \
 **Defaults:** pages capped at 4 (fits most 16k-context VLMs), Nanonets
 backend (must set `IDP_ENABLE_NANONETS=1`), fallback to Mock for tests.
 
+**Hint grounding:** when you provide a hint, `discover_schema()`
+extracts candidate field-name tokens from it and checks how many of
+them appear in the discovered schema (exact match, plus fuzzy match
+with SequenceMatcher ratio > 0.8). The result is on
+`DiscoveryResult.hint_grounding` as a dict with `hint_tokens`,
+`schema_fields`, `grounded`, `ungrounded`, and a `grounding_score`
+(0.0 = none of your hint tokens appear, 1.0 = perfect match). If
+the score is below 0.5, a warning is logged telling you which hint
+tokens the LLM ignored. Doesn't fix wrong names — makes the wrongness
+observable so you know to verify.
+
+```python
+result = idp.discover_schema("scan.pdf", hint="...")
+if result.hint_grounding and result.hint_grounding["grounding_score"] < 0.5:
+    print("LLM largely ignored your hint!")
+    print("missing:", result.hint_grounding["ungrounded"])
+```
+
 **Honest limits:**
 
 - LLM-proposed field names are sometimes wrong — the user hint steers
-  this but doesn't guarantee it. Always review the resulting schema
-  against a few real extractions before using in production.
+  this but doesn't guarantee it. The `hint_grounding` field above
+  makes this observable. Always review the resulting schema against
+  a few real extractions before using in production.
 - Field types are inferred from the JSON Schema (string / number /
   integer / boolean / array / nested object). Required-vs-optional
   is preserved.
@@ -339,7 +358,7 @@ backend (must set `IDP_ENABLE_NANONETS=1`), fallback to Mock for tests.
   for the validation step.
 
 See [`src/idp/discover.py`](src/idp/discover.py) for the implementation,
-[`tests/test_discover.py`](tests/test_discover.py) for the 31 tests,
+[`tests/test_discover.py`](tests/test_discover.py) for the 45 tests,
 and [`examples/discover_schema_sample.py`](examples/discover_schema_sample.py)
 for a runnable end-to-end demo.
 
@@ -417,6 +436,82 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 
 ---
 
+## Reliability: retries, cache, checkpoint
+
+Three opt-in features for production workloads.
+
+### RetryingBackend — automatic retries with backoff
+
+Wrap any `Backend` with exponential-backoff retries on transient errors
+(rate limits, timeouts, connection errors). Auth and bad-request errors
+fail fast — no point retrying those.
+
+```python
+from idp import Pipeline
+from idp.reliability import RetryConfig
+
+pipe = Pipeline(
+    backend="openai",
+    schema="Invoice",
+    retry=RetryConfig(max_retries=5, initial_delay_sec=2.0, max_delay_sec=60.0),
+)
+```
+
+Defaults: 4 attempts, 1s → 2s → 4s → 8s with ±20% jitter, capped at 30s.
+On non-retryable errors (`AuthError`, `BadRequestError`) the wrapped
+backend raises immediately. Errors are classified via message pattern
+matching — see `idp.reliability.classify_exception` for the taxonomy.
+
+### ExtractionCache — disk-backed dedup
+
+Same input → no LLM call. Cache key = sha256 of
+`(schema_name, backend_name, request payload)`. Hits are tracked per
+schema for observability.
+
+```python
+from idp import Pipeline
+from idp.reliability import ExtractionCache
+
+pipe = Pipeline(
+    backend="nanonets",
+    schema="Invoice",
+    cache=ExtractionCache("/dbfs/mnt/idp/extract.db"),  # default: ~/.cache/idp/extract.db
+)
+```
+
+Default location is `~/.cache/idp/extract.db` — survives across
+process restarts. Stats via `cache.stats()` return entries, total_hits,
+per-schema breakdown.
+
+### CheckpointStore — batch resume
+
+For `process_batch()` over hundreds/thousands of docs, an interrupted
+run (server restart, network blip) loses no work on retry. Idempotent
+by default — just pass the same checkpoint path on retry:
+
+```python
+from idp.llm.nanonets_batch import process_batch
+
+# First run: processes docs 1-1000, dies at doc 500
+results = process_batch(paths, pipeline, checkpoint="/dbfs/.../cp.jsonl")
+# Second run: docs 1-499 skipped (in ledger), resumes from doc 500
+results = process_batch(paths, pipeline, checkpoint="/dbfs/.../cp.jsonl")
+```
+
+Set `archive_at_start=True` to rotate the ledger between runs (one
+file per run, history preserved). Use `CheckpointStore.clear()` to
+force re-processing.
+
+Both `retry=True` and `cache=True` compose: `cache` is applied AFTER
+`retry` so cached hits skip the retry loop entirely.
+
+See [`src/idp/reliability.py`](src/idp/reliability.py),
+[`src/idp/checkpoint.py`](src/idp/checkpoint.py), and
+[`tests/test_reliability.py`](tests/test_reliability.py) /
+[`tests/test_checkpoint.py`](tests/test_checkpoint.py) for the full API.
+
+---
+
 ## Production scaffolding (built in, optional)
 
 | concern | ships with | swap for production |
@@ -431,7 +526,7 @@ Reports per-strategy: **schema-valid rate**, **field-level F1**, **$/doc**, **la
 | **Document chunking** | `idp.chunker` (auto for oversized input) | custom `PageChunker` / `TokenChunker` |
 | **Schema discovery** | `idp.discover_schema` + `idp discover-schema` | custom multimodal backend |
 
-### Not in 0.3 (deliberately)
+### Not in 0.3.x (deliberately)
 
 Multi-tenant isolation, SSO/SAML/RBAC, audit-grade storage — needed for SaaS but premature for a single-tenant self-host. Open an issue to request.
 
@@ -549,7 +644,7 @@ python -m examples.batch        # process_batch() helper for Databricks-style ba
 python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
-`import idp; idp.__version__` → `0.3.0`.
+`import idp; idp.__version__` → `0.3.2`.
 
 ---
 
@@ -574,7 +669,7 @@ Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
 the release flow — lives in [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
-version. CI runs ruff + mypy + 458 tests across Python 3.10 / 3.11 /
+version. CI runs ruff + mypy + 506 tests across Python 3.10 / 3.11 /
 3.12 on every PR.
 
 ---
