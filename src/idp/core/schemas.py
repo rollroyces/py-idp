@@ -98,10 +98,41 @@ class BankStatement(BaseModel):
     transactions: list[BankTransaction] = Field(default_factory=list)
 
 
+class ReceiptLineItem(BaseModel):
+    """One line on a receipt (CORD-style)."""
+
+    description: str
+    quantity: float = 1.0
+    unit_price: float
+    total: float
+
+
+class Receipt(BaseModel):
+    """Receipt extraction schema (CORD: Consolidated Receipt Dataset shape).
+
+    `merchant_name` is required (a receipt without an identified merchant
+    is unactionable). Other fields are optional and may be partially
+    extracted — handwritten or faded receipts often miss subtotals, tips,
+    or tax.
+    """
+
+    merchant_name: str
+    date: str | None = None
+    time: str | None = None
+    line_items: list[ReceiptLineItem] = Field(default_factory=list)
+    subtotal: float | None = None
+    tax_amount: float | None = None
+    tip_amount: float | None = None
+    total: float | None = None
+    payment_method: str | None = None
+    credit_card_last4: str | None = None
+
+
 SCHEMA_REGISTRY: dict[str, type[BaseModel]] = {
     "Invoice": Invoice,
     "Contract": Contract,
     "BankStatement": BankStatement,
+    "Receipt": Receipt,
 }
 
 

@@ -1,0 +1,18 @@
+CORD-style receipt: cafe latte + croissant
+Date: 2025-03-14
+Time: 09:42
+
+Blue Bottle Coffee
+221 East 12th Street, NYC
+
+1  Latte                $5.50
+1  Croissant            $4.25
+1  Sparkling water      $3.00
+
+Subtotal             $12.75
+Tax                   $1.10
+Tip                   $0.00
+Total                $13.85
+
+Visa ****4242
+Thank you

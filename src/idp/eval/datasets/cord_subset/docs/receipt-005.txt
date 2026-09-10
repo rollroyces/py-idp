@@ -1,0 +1,14 @@
+CORD-style receipt: parking garage (no line items)
+Date: 2025-04-30
+Time: 11:08
+
+Icon Parking
+88 Wall Street
+
+Flat rate (5 hours)  $45.00
+
+Subtotal             $45.00
+Tax                   $3.94
+Total                $48.94
+
+Mastercard ****8820
