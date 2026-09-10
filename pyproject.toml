@@ -29,6 +29,7 @@ dependencies = [
     "tenacity>=8.2",
     "streamlit>=1.32",
     "pdfplumber>=0.10",        # lightweight fallback parser
+    "tiktoken>=0.7",           # token-budget chunking (chunker.TokenChunker, extract optimizer)
 ]
 
 [project.optional-dependencies]

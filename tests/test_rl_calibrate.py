@@ -1,6 +1,8 @@
 """Tests for the rl.calibrate module (RL calibration eval)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from idp.rl.calibrate import (
@@ -10,6 +12,12 @@ from idp.rl.calibrate import (
     synthetic_reviews_from_gold,
 )
 from idp.rl.policy import PolicyConfig
+
+# Path to the in-repo invoices fixture, derived from this file's location
+# so the tests are portable across machines and CI.
+INVOICES_DIR = (
+    Path(__file__).resolve().parents[1] / "src/idp/eval/datasets/invoices"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +38,7 @@ def test_load_reviews_basic(tmp_path):
 # ---------------------------------------------------------------------------
 def test_synthetic_reviews_generates_corrections():
     revs, outcomes = synthetic_reviews_from_gold(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices",
+        str(INVOICES_DIR),
         injection_rate=0.5, seed=42,
     )
     # 3 invoices with 9 fields each, injection_rate=0.5, k=4-5 corrupt
@@ -42,11 +50,11 @@ def test_synthetic_reviews_generates_corrections():
 
 def test_synthetic_reviews_deterministic_seed():
     a, _ = synthetic_reviews_from_gold(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices",
+        str(INVOICES_DIR),
         injection_rate=0.3, seed=7,
     )
     b, _ = synthetic_reviews_from_gold(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices",
+        str(INVOICES_DIR),
         injection_rate=0.3, seed=7,
     )
     assert a == b
@@ -124,7 +132,7 @@ def test_calibration_empty_reviews():
 # ---------------------------------------------------------------------------
 def test_end_to_end_synthetic_eval_pipeline(tmp_path):
     revs, _ = synthetic_reviews_from_gold(
-        "/Users/hermes/py-idp/src/idp/eval/datasets/invoices",
+        str(INVOICES_DIR),
         injection_rate=0.3, seed=0,
     )
     # build a policy that fires on all fields with any correction
