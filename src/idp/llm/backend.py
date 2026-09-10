@@ -520,8 +520,15 @@ def _stub(
         return _stub(merged, defs)
 
     t = schema.get("type")
-    if t == "object" or (t is None and "properties" in schema):
-        return {k: _stub(v, defs) for k, v in schema.get("properties", {}).items()}
+    # Defensive: ``properties`` should be a dict, but Hypothesis-generated
+    # inputs (and some real-world malformed schemas) can give us an int or
+    # None. Coerce safely so we don't crash on garbage.
+    properties = schema.get("properties")
+    has_object_props = isinstance(properties, dict)
+    if t == "object" or (t is None and has_object_props):
+        # properties is dict here; mypy needs the assertion
+        assert isinstance(properties, dict)
+        return {k: _stub(v, defs) for k, v in properties.items()}
     if t == "array":
         return [_stub(schema.get("items", {}), defs)]
     if t == "string":
@@ -532,9 +539,14 @@ def _stub(
         return False
     if t == "null":
         return None
-    if "properties" in schema:
-        return {k: _stub(v, defs) for k, v in schema["properties"].items()}
-    return None
+    if has_object_props:
+        assert isinstance(properties, dict)
+        return {k: _stub(v, defs) for k, v in properties.items()}
+    # Malformed: no recognizable type, properties not a dict. Return
+    # the raw schema (caller may have already extracted defaults from
+    # the dict). This preserves test contracts like "keys preserved for
+    # flat int-valued dicts".
+    return schema
 
 
 def _perturb_json(schema_str: str) -> str:

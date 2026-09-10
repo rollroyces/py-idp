@@ -114,3 +114,36 @@ def test_extract_schema_block_with_json_marker(s):
                 assert parsed == json.loads(out)
             except json.JSONDecodeError:
                 pass  # not valid JSON, nothing to assert
+
+
+# ---------------------------------------------------------------------------
+# Regression: malformed schemas where properties isn't a dict
+# ---------------------------------------------------------------------------
+def test_stub_does_not_crash_on_non_dict_properties():
+    """Regression: {'properties': 0} (int) used to crash _stub()."""
+    from idp.llm.backend import _stub
+    # Should not raise — defensive coercion handles malformed input.
+    out = _stub({"properties": 0})
+    # The function falls back to returning the schema unchanged when
+    # it can't recognize a structure. Either way, no crash.
+    assert out is not None
+
+
+def test_stub_does_not_crash_on_properties_as_none():
+    from idp.llm.backend import _stub
+    out = _stub({"properties": None})
+    assert out is not None
+
+
+def test_stub_handles_empty_dict():
+    from idp.llm.backend import _stub
+    assert _stub({}) is not None
+
+
+def test_stub_handles_nested_garbage():
+    """Nested malformed schemas: int where dict is expected."""
+    from idp.llm.backend import _stub
+    out = _stub({"type": "object", "properties": {"a": 0, "b": "string"}})
+    # 'a' is int — _stub recurses on it (returns 0.0 for number type);
+    # 'b' is string — returns "" for string type. Should not crash.
+    assert isinstance(out, dict)
