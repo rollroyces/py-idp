@@ -27,7 +27,11 @@ from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
-__version__ = "0.3.2"
+# Kept in sync with `version` in pyproject.toml.
+# pyproject.toml is the source of truth (used by `python -m build` and
+# trusted-publisher publish); this __version__ is mirrored here so users
+# can introspect it at runtime via `import idp; idp.__version__`.
+__version__ = "0.3.1"
 __all__ = [
     "Block",
     "DiscoveryResult",
