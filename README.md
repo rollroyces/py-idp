@@ -1,6 +1,6 @@
 # py-idp
 
-**Languages:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+**Languages:** [English](https://github.com/rollroyces/py-idp/blob/main/README.md) · [繁體中文](https://github.com/rollroyces/py-idp/blob/main/README.zh-TW.md) · [简体中文](https://github.com/rollroyces/py-idp/blob/main/README.zh-CN.md)
 ·
 [Docs site](https://rollroyces.github.io/py-idp/) · [PyPI](https://pypi.org/project/py-idp/) · [GitHub](https://github.com/rollroyces/py-idp)
 
@@ -11,14 +11,14 @@
 > 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
 > **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B. AI-driven schema discovery.**
 
-[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
-[![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL)
+[![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml/badge.svg)](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/py-idp)](https://pypi.org/project/py-idp/)
 [![Downloads](https://img.shields.io/pypi/dm/py-idp)](https://pypistats.org/packages/py-idp)
 [![GitHub stars](https://img.shields.io/github/stars/rollroyces/py-idp)](https://github.com/rollroyces/py-idp/stargazers)
-[![Cite this repository](https://img.shields.io/badge/Cite-CITATION.cff-blue)](CITATION.cff)
+[![Cite this repository](https://img.shields.io/badge/Cite-CITATION.cff-blue)](https://github.com/rollroyces/py-idp/blob/main/CITATION.cff)
 
 ---
 
@@ -245,8 +245,8 @@ error is logged (`extract_chunk_failed[i]`) but other chunks' data is
 still merged in. You get partial results + a clear error trail, not
 a hard crash.
 
-See [`src/idp/chunker.py`](src/idp/chunker.py) for the implementation
-and [`tests/test_chunker.py`](tests/test_chunker.py) for the 34 tests.
+See [`src/idp/chunker.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/chunker.py) for the implementation
+and [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_chunker.py) for the 34 tests.
 
 ---
 
@@ -262,7 +262,7 @@ idp eval --dataset src/idp/eval/datasets/invoices \
 idp serve                                              # launch Streamlit HITL UI on :8501
 ```
 
-For copy-pasteable scripts that show each backend / pipeline pattern end-to-end, see [`examples/`](examples/README.md) — every numbered example is runnable offline with `python examples/NN_*.py` and falls back to `MockBackend` if no API key is set.
+For copy-pasteable scripts that show each backend / pipeline pattern end-to-end, see [`examples/`](https://github.com/rollroyces/py-idp/blob/main/examples/README.md) — every numbered example is runnable offline with `python examples/NN_*.py` and falls back to `MockBackend` if no API key is set.
 
 ---
 
@@ -373,9 +373,9 @@ if result.hint_grounding and result.hint_grounding["grounding_score"] < 0.5:
   discovered schema into `Pipeline(schema=...)` and use HITL review
   for the validation step.
 
-See [`src/idp/discover.py`](src/idp/discover.py) for the implementation,
-[`tests/test_discover.py`](tests/test_discover.py) for the 45 tests,
-and [`examples/discover_schema_sample.py`](examples/discover_schema_sample.py)
+See [`src/idp/discover.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/discover.py) for the implementation,
+[`tests/test_discover.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_discover.py) for the 45 tests,
+and [`examples/discover_schema_sample.py`](https://github.com/rollroyces/py-idp/blob/main/examples/discover_schema_sample.py)
 for a runnable end-to-end demo.
 
 ---
@@ -415,8 +415,8 @@ The merged extraction is **schema-validated as a whole** after merging,
 so you still get a Pydantic-typed result even though it was built from
 many small extractions.
 
-See [`src/idp/chunker.py`](src/idp/chunker.py) for the implementation
-and [`tests/test_chunker.py`](tests/test_chunker.py) for the 34 tests.
+See [`src/idp/chunker.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/chunker.py) for the implementation
+and [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_chunker.py) for the 34 tests.
 
 ---
 
@@ -443,11 +443,11 @@ Two built-ins ship; define your own by writing a `(dict) -> (bool, str | None)` 
 
 A live end-to-end run on the in-tree sample invoice (MockBackend — no API key):
 
-![py-idp pipeline running on a sample invoice](docs/assets/demo-pipeline.svg)
+![py-idp pipeline running on a sample invoice](https://github.com/rollroyces/py-idp/blob/main/docs/assets/demo-pipeline.svg)
 
 The same extraction viewed through the Streamlit HITL review UI:
 
-![Streamlit HITL review UI](docs/assets/demo-hitl.svg)
+![Streamlit HITL review UI](https://github.com/rollroyces/py-idp/blob/main/docs/assets/demo-hitl.svg)
 
 (The SVGs above are illustrative mockups. For real screen recordings, run
 `idp run path/to/your-invoice.pdf --backend ollama` and `idp serve`.)
@@ -546,10 +546,10 @@ force re-processing.
 Both `retry=True` and `cache=True` compose: `cache` is applied AFTER
 `retry` so cached hits skip the retry loop entirely.
 
-See [`src/idp/reliability.py`](src/idp/reliability.py),
-[`src/idp/checkpoint.py`](src/idp/checkpoint.py), and
-[`tests/test_reliability.py`](tests/test_reliability.py) /
-[`tests/test_checkpoint.py`](tests/test_checkpoint.py) for the full API.
+See [`src/idp/reliability.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/reliability.py),
+[`src/idp/checkpoint.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/checkpoint.py), and
+[`tests/test_reliability.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_reliability.py) /
+[`tests/test_checkpoint.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_checkpoint.py) for the full API.
 
 ---
 
@@ -691,7 +691,7 @@ python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scena
 
 ## Security
 
-Found a vulnerability? See [`docs/SECURITY.md`](docs/SECURITY.md) — please
+Found a vulnerability? See [`docs/SECURITY.md`](https://github.com/rollroyces/py-idp/blob/main/docs/SECURITY.md) — please
 **do not** file it as a public issue.
 
 ---
@@ -699,7 +699,7 @@ Found a vulnerability? See [`docs/SECURITY.md`](docs/SECURITY.md) — please
 ## Citing
 
 If py-idp helped your research or product, the academic citation lives
-in [`CITATION.cff`](CITATION.cff). The BibTeX export is one click on the
+in [`CITATION.cff`](https://github.com/rollroyces/py-idp/blob/main/CITATION.cff). The BibTeX export is one click on the
 GitHub sidebar ("Cite this repository").
 
 ---
@@ -708,7 +708,7 @@ GitHub sidebar ("Cite this repository").
 
 Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
-the release flow — lives in [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug
+the release flow — lives in [`CONTRIBUTING.md`](https://github.com/rollroyces/py-idp/blob/main/CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
 version. CI runs ruff + mypy + 508 tests across Python 3.10 / 3.11 /
 3.12 on every PR.

@@ -1,6 +1,6 @@
 # py-idp
 
-**語言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+**語言:** [English](https://github.com/rollroyces/py-idp/blob/main/README.md) · [繁體中文](https://github.com/rollroyces/py-idp/blob/main/README.zh-TW.md) · [简体中文](https://github.com/rollroyces/py-idp/blob/main/README.zh-CN.md)
 ·
 [文件站點](https://rollroyces.github.io/py-idp/) · [PyPI](https://pypi.org/project/py-idp/) · [GitHub](https://github.com/rollroyces/py-idp)
 
@@ -11,14 +11,14 @@
 > 支援 12+ 種 LLM 後端。以 Pydantic Schema 為驅動。內建評測工具組。
 > **自動分塊處理超大文件。透過 Nanonets-OCR2-3B 實現自架 OCR。AI 驅動的 Schema 自動探索。**
 
-[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
-[![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL)
+[![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-COMMERCIAL)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml/badge.svg)](https://github.com/rollroyces/py-idp/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/py-idp)](https://pypi.org/project/py-idp/)
 [![Downloads](https://img.shields.io/pypi/dm/py-idp)](https://pypistats.org/packages/py-idp)
 [![GitHub stars](https://img.shields.io/github/stars/rollroyces/py-idp)](https://github.com/rollroyces/py-idp/stargazers)
-[![Cite this repository](https://img.shields.io/badge/Cite-CITATION.cff-blue)](CITATION.cff)
+[![Cite this repository](https://img.shields.io/badge/Cite-CITATION.cff-blue)](https://github.com/rollroyces/py-idp/blob/main/CITATION.cff)
 
 ---
 
@@ -232,7 +232,7 @@ result = pipe.run(Document.from_path("huge-50-page-scan.pdf"))
 
 **逐塊容錯**：如果某一塊的 LLM 呼叫失敗，錯誤會被記錄（`extract_chunk_failed[i]`），但其他塊的資料仍會被合併。你將獲得部分結果 + 清楚的錯誤日誌，而不是整個崩潰。
 
-詳見 [`src/idp/chunker.py`](src/idp/chunker.py) 實作與 [`tests/test_chunker.py`](tests/test_chunker.py) 34 個測試。
+詳見 [`src/idp/chunker.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/chunker.py) 實作與 [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_chunker.py) 34 個測試。
 
 ---
 
@@ -331,7 +331,7 @@ if result.hint_grounding and result.hint_grounding["grounding_score"] < 0.5:
 - LLM 有時會輸出 ```json 圍欄或在結果外加一段說明文字；解析器會自動剝離。純垃圾回應會拋出 `ValueError`，錯誤訊息包含前 200 字元以便除錯。
 - 這是 **Schema 探索**（告訴你有哪些欄位、欄位叫什麼名字），不是 Schema **驗證**（告訴你抽取得對不對）——請將探索出的 Schema 傳入 `Pipeline(schema=...)`，並在 HITL 複核中完成驗證步驟。
 
-詳見 [`src/idp/discover.py`](src/idp/discover.py) 實作，[`tests/test_discover.py`](tests/test_discover.py) 45 個測試，以及 [`examples/discover_schema_sample.py`](examples/discover_schema_sample.py) 可執行的端對端範例。
+詳見 [`src/idp/discover.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/discover.py) 實作，[`tests/test_discover.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_discover.py) 45 個測試，以及 [`examples/discover_schema_sample.py`](https://github.com/rollroyces/py-idp/blob/main/examples/discover_schema_sample.py) 可執行的端對端範例。
 
 ---
 
@@ -363,7 +363,7 @@ print(result.document.extraction.get("_chunk_count"))  # 約 25
 
 合併後的抽取在合併完成後會進行**整 Schema 校驗**，因此即便抽取過程分散在多個小塊，最終你拿到的依然是 Pydantic 類型的強校驗結果。
 
-詳見 [`src/idp/chunker.py`](src/idp/chunker.py) 實作與 [`tests/test_chunker.py`](tests/test_chunker.py) 34 個測試。
+詳見 [`src/idp/chunker.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/chunker.py) 實作與 [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_chunker.py) 34 個測試。
 
 ---
 
@@ -390,11 +390,11 @@ pipe = Pipeline(
 
 在內建範例發票上的端對端即時執行（MockBackend —— 無需 API Key）：
 
-![py-idp 在範例發票上的管線](docs/assets/demo-pipeline.svg)
+![py-idp 在範例發票上的管線](https://github.com/rollroyces/py-idp/blob/main/docs/assets/demo-pipeline.svg)
 
 同一個抽取過程在 Streamlit HITL 複核 UI 中的呈現：
 
-![Streamlit HITL 複核介面](docs/assets/demo-hitl.svg)
+![Streamlit HITL 複核介面](https://github.com/rollroyces/py-idp/blob/main/docs/assets/demo-hitl.svg)
 
 （上面的 SVG 為示意效果圖。如需真實錄影，請執行 `idp run path/to/your-invoice.pdf --backend ollama` 和 `idp serve`。）
 
@@ -478,10 +478,10 @@ results = process_batch(paths, pipeline, checkpoint="/dbfs/.../cp.jsonl")
 
 `retry=True` 和 `cache=True` 可以疊加使用：`cache` 在 `retry` 之後生效，因此快取命中完全跳過重試邏輯。
 
-詳見 [`src/idp/reliability.py`](src/idp/reliability.py)、
-[`src/idp/checkpoint.py`](src/idp/checkpoint.py)，
-以及 [`tests/test_reliability.py`](tests/test_reliability.py) /
-[`tests/test_checkpoint.py`](tests/test_checkpoint.py) 的完整 API。
+詳見 [`src/idp/reliability.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/reliability.py)、
+[`src/idp/checkpoint.py`](https://github.com/rollroyces/py-idp/blob/main/src/idp/checkpoint.py)，
+以及 [`tests/test_reliability.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_reliability.py) /
+[`tests/test_checkpoint.py`](https://github.com/rollroyces/py-idp/blob/main/tests/test_checkpoint.py) 的完整 API。
 
 ---
 
@@ -623,19 +623,19 @@ python -m examples.discover_schema_sample  # AI 驅動的 Schema 探索（6 個�
 
 ## 安全
 
-發現安全漏洞？請查閱 [`docs/SECURITY.md`](docs/SECURITY.md) —— **請勿**以公開 issue 形式提交。
+發現安全漏洞？請查閱 [`docs/SECURITY.md`](https://github.com/rollroyces/py-idp/blob/main/docs/SECURITY.md) —— **請勿**以公開 issue 形式提交。
 
 ---
 
 ## 引用
 
-如果 py-idp 幫到了你的研究或產品，學術引用見 [`CITATION.cff`](CITATION.cff)。GitHub 側欄的 "Cite this repository" 按鈕可一鍵匯出 BibTeX。
+如果 py-idp 幫到了你的研究或產品，學術引用見 [`CITATION.cff`](https://github.com/rollroyces/py-idp/blob/main/CITATION.cff)。GitHub 側欄的 "Cite this repository" 按鈕可一鍵匯出 BibTeX。
 
 ---
 
 ## 貢獻
 
-歡迎提交 Issue、PR 和 Discussion。完整指南——包括如何新增 LLM 後端或 Schema、提交訊息規範、發布流程——見 [`CONTRIBUTING.md`](CONTRIBUTING.md)。Bug 報告最好附上最小重現腳本和你的 `py-idp` 版本。CI 在每次 PR 上執行 ruff + mypy + 508 個測試，涵蓋 Python 3.10 / 3.11 / 3.12。
+歡迎提交 Issue、PR 和 Discussion。完整指南——包括如何新增 LLM 後端或 Schema、提交訊息規範、發布流程——見 [`CONTRIBUTING.md`](https://github.com/rollroyces/py-idp/blob/main/CONTRIBUTING.md)。Bug 報告最好附上最小重現腳本和你的 `py-idp` 版本。CI 在每次 PR 上執行 ruff + mypy + 508 個測試，涵蓋 Python 3.10 / 3.11 / 3.12。
 
 ---
 
