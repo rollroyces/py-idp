@@ -1,11 +1,15 @@
 # py-idp
 
+**語言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+·
+[文件站點](https://rollroyces.github.io/py-idp/) · [PyPI](https://pypi.org/project/py-idp/) · [GitHub](https://github.com/rollroyces/py-idp)
+
+---
+
 > **以 Python 為基礎的通用 AI 智慧文件處理框架。**
 > 六階段管線（parse → classify → extract → assess → validate → HITL）。
 > 支援 12+ 種 LLM 後端。以 Pydantic Schema 為驅動。內建評測工具組。
 > **自動分塊處理超大文件。透過 Nanonets-OCR2-3B 實現自架 OCR。AI 驅動的 Schema 自動探索。**
-
-**語言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
@@ -21,14 +25,22 @@
 ## 安裝
 
 ```bash
-pip install py-idp                # 核心套件（pydantic + typer + rich + httpx + pdfplumber）
+pip install py-idp                # 核心套件（pydantic + typer + rich + httpx + pdfplumber + tiktoken）
 pip install py-idp[docling]      # IBM Docling —— 最佳的 PDF 表格抽取
+pip install py-idp[ocr]           # tesseract 兜底，用於較多雜訊的掃描件
 pip install py-idp[openai]       # OpenAI SDK（同時用於 8 個中國 LLM）
 pip install py-idp[anthropic]    # Anthropic SDK
-pip install py-idp[api]           # FastAPI 伺服器（idp.api:app，生產可用）
+pip install py-idp[ollama]       # Ollama 客戶端
+pip install py-idp[china]        # 透過 OpenAI 相容協定接入 8 家中國大模型
 pip install py-idp[hf-vlm]        # 自架 Nanonets-OCR2-3B（Apple Silicon / CUDA）
-pip install py-idp[dev]          # pytest + ruff + mypy
+pip install py-idp[api]           # FastAPI 伺服器（idp.api:app，生產可用）
+pip install py-idp[pdf-render]    # PDF → 影像渲染，供多模態後端使用
+pip install py-idp[eval]          # datasets + pandas，用於 `idp eval`
+pip install py-idp[dev]           # pytest + ruff + mypy + hypothesis + pytest-benchmark
+pip install py-idp[docs]          # mkdocs + mkdocstrings，用於本地構建文件站點
 ```
+
+組合安裝：`pip install py-idp[docling,anthropic,eval,dev]`。
 
 > 安裝與執行測試套件皆無需 API Key——`MockBackend` 已內建。
 > `tiktoken` 由核心套件自動安裝（用於以 token 預算為基礎的分塊）。

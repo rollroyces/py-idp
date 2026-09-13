@@ -11,6 +11,7 @@ Six-stage pipeline (parse → classify → extract → assess → validate → H
 
 [:material-rocket-launch: Getting started](getting-started/installation.md){ .md-button .md-button--primary }
 [:fontawesome-brands-github: View on GitHub](https://github.com/rollroyces/py-idp){ .md-button }
+[:fontawesome-brands-python: Install from PyPI](https://pypi.org/project/py-idp/){ .md-button }
 
 ---
 
@@ -36,11 +37,16 @@ pip install py-idp                          # core
 pip install py-idp[docling]                 # IBM Docling PDF parser
 pip install py-idp[anthropic]               # Anthropic Claude
 pip install py-idp[openai]                  # OpenAI GPT-4o (+ China-LLM compatible gateways)
+pip install py-idp[ollama]                  # local Ollama
 pip install py-idp[hf-vlm]                  # self-hosted Nanonets-OCR2-3B
 pip install py-idp[api]                     # FastAPI server (idp.api:app)
+pip install py-idp[pdf-render]              # PDF → image rendering for multimodal backends
+pip install py-idp[eval]                    # datasets + pandas for `idp eval`
 pip install py-idp[dev]                     # pytest + ruff + mypy
 pip install py-idp[docs]                    # this site (mkdocs-material)
 ```
+
+Combine extras: `pip install py-idp[docling,anthropic,eval,dev]`.
 
 No API key needed to run the in-tree eval, the examples, or the full test suite — the `MockBackend` is built in.
 
@@ -63,6 +69,22 @@ print(result.validation)        # schema + custom predicate outcomes
 ```
 
 See the [30-second tour](getting-started/30-second-tour.md) for the full output.
+
+---
+
+## Examples
+
+The [`examples/` directory on GitHub](https://github.com/rollroyces/py-idp/tree/main/examples) has 5 numbered, copy-pasteable scripts that show each major use case end-to-end. Every one falls back to the in-tree `MockBackend` if no API key is set, so they all run in a fresh venv.
+
+| # | script | what it shows |
+|---|---|---|
+| 01 | `pipeline_minimal.py` | the smallest possible end-to-end run |
+| 02 | `anthropic.py` | Anthropic Claude 3.5 Sonnet |
+| 03 | `china_qwen.py` | Qwen via DashScope (one of the 8 China-LLM providers) |
+| 04 | `hitl_loop.py` | programmatic HITL feedback loop |
+| 05 | `batch.py` | batch-process multiple documents and save JSON output |
+
+Full table with API-key requirements: [examples/README.md](https://github.com/rollroyces/py-idp/blob/main/examples/README.md).
 
 ---
 

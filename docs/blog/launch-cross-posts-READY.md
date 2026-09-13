@@ -9,8 +9,8 @@
 
 | post | where | when | post body below |
 |---|---|---|---|
-| first | r/LocalLLaMA | Tue/Wed/Thu morning (US Eastern) | [Section 1](#1-rlocalllama--show--tell) |
-| second | HN Show HN | **at least 24 hours later** | [Section 2](#2-hacker-news--show-hn) |
+| first | r/LocalLLaMA | Tue/Wed/Thu morning (US Eastern) | [Section 1](#1-rlocalllama-show-tell) |
+| second | HN Show HN | **at least 24 hours later** | [Section 2](#2-hacker-news-show-hn) |
 
 ---
 

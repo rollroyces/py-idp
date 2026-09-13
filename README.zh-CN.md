@@ -1,11 +1,15 @@
 # py-idp
 
+**语言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+·
+[文档站点](https://rollroyces.github.io/py-idp/) · [PyPI](https://pypi.org/project/py-idp/) · [GitHub](https://github.com/rollroyces/py-idp)
+
+---
+
 > **面向 Python 的通用 AI 智能文档处理框架。**
 > 六阶段流水线（parse → classify → extract → assess → validate → HITL）。
 > 支持 12+ 种 LLM 后端。以 Pydantic Schema 为驱动。内置评测工具集。
 > **自动分块处理超大文档。通过 Nanonets-OCR2-3B 实现自托管 OCR。AI 驱动的 Schema 自动发现。**
-
-**语言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
@@ -21,14 +25,22 @@
 ## 安装
 
 ```bash
-pip install py-idp                # 核心依赖（pydantic + typer + rich + httpx + pdfplumber）
+pip install py-idp                # 核心依赖（pydantic + typer + rich + httpx + pdfplumber + tiktoken）
 pip install py-idp[docling]      # IBM Docling — 最佳 PDF 表格抽取
+pip install py-idp[ocr]           # tesseract 兜底，用于噪点较多的扫描件
 pip install py-idp[openai]       # OpenAI SDK（同时也用于 8 个中国 LLM）
 pip install py-idp[anthropic]    # Anthropic SDK
-pip install py-idp[api]           # FastAPI 服务器（idp.api:app，生产可用）
+pip install py-idp[ollama]       # Ollama 客户端
+pip install py-idp[china]        # 通过 OpenAI 兼容协议接入 8 家中国大模型
 pip install py-idp[hf-vlm]        # 自托管 Nanonets-OCR2-3B（Apple Silicon / CUDA）
-pip install py-idp[dev]          # pytest + ruff + mypy
+pip install py-idp[api]           # FastAPI 服务器（idp.api:app，生产可用）
+pip install py-idp[pdf-render]    # PDF → 图像渲染，供多模态后端使用
+pip install py-idp[eval]          # datasets + pandas，用于 `idp eval`
+pip install py-idp[dev]           # pytest + ruff + mypy + hypothesis + pytest-benchmark
+pip install py-idp[docs]          # mkdocs + mkdocstrings，用于本地构建文档站点
 ```
+
+组合安装：`pip install py-idp[docling,anthropic,eval,dev]`。
 
 > 安装与运行测试套件均无需 API Key——`MockBackend` 已内置。
 > `tiktoken` 由核心包自动安装（用于基于 token 预算的分块）。
