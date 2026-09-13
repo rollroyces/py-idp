@@ -1,11 +1,15 @@
 # py-idp
 
+**語言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+·
+[文件站點](https://rollroyces.github.io/py-idp/) · [PyPI](https://pypi.org/project/py-idp/) · [GitHub](https://github.com/rollroyces/py-idp)
+
+---
+
 > **以 Python 為基礎的通用 AI 智慧文件處理框架。**
 > 六階段管線（parse → classify → extract → assess → validate → HITL）。
 > 支援 12+ 種 LLM 後端。以 Pydantic Schema 為驅動。內建評測工具組。
 > **自動分塊處理超大文件。透過 Nanonets-OCR2-3B 實現自架 OCR。AI 驅動的 Schema 自動探索。**
-
-**語言:** [English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](LICENSE-COMMERCIAL)
