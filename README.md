@@ -21,14 +21,22 @@
 ## Install
 
 ```bash
-pip install py-idp                # core (pydantic + typer + rich + httpx + pdfplumber)
+pip install py-idp                # core (pydantic + typer + rich + httpx + pdfplumber + tiktoken)
 pip install py-idp[docling]      # IBM Docling — best PDF table extraction
+pip install py-idp[ocr]           # tesseract fallback for noisy scans
 pip install py-idp[openai]       # OpenAI SDK (also used for 8 China LLMs)
 pip install py-idp[anthropic]    # Anthropic SDK
-pip install py-idp[api]           # FastAPI server (idp.api:app — production-ready)
+pip install py-idp[ollama]       # Ollama client
+pip install py-idp[china]        # 8 China LLM providers via OpenAI-compatible protocol
 pip install py-idp[hf-vlm]        # Self-hosted Nanonets-OCR2-3B (Apple Silicon / CUDA)
-pip install py-idp[dev]          # pytest + ruff + mypy
+pip install py-idp[api]           # FastAPI server (idp.api:app — production-ready)
+pip install py-idp[pdf-render]    # PDF → image rendering for multimodal backends
+pip install py-idp[eval]          # datasets + pandas for `idp eval`
+pip install py-idp[dev]           # pytest + ruff + mypy + hypothesis + pytest-benchmark
+pip install py-idp[docs]          # mkdocs + mkdocstrings for building the docs site locally
 ```
+
+Combine: `pip install py-idp[docling,anthropic,eval,dev]`.
 
 > No API key needed to install or run the test suite — `MockBackend` ships in-tree.
 > `tiktoken` is installed automatically by the core package (used for token-budget chunking).

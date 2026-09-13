@@ -104,7 +104,8 @@ nav:
   - Blog:
       - Posts: blog/index.md
       - v0.3.1 launch: blog/launch-0.3.1.md
-      - Launch cross-posts: blog/launch-cross-posts.md
+      - Launch cross-posts (drafts): blog/launch-cross-posts.md
+      - Launch cross-posts (READY): blog/launch-cross-posts-READY.md
 
 extra:
   generator: false

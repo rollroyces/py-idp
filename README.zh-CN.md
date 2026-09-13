@@ -21,14 +21,22 @@
 ## 安装
 
 ```bash
-pip install py-idp                # 核心依赖（pydantic + typer + rich + httpx + pdfplumber）
+pip install py-idp                # 核心依赖（pydantic + typer + rich + httpx + pdfplumber + tiktoken）
 pip install py-idp[docling]      # IBM Docling — 最佳 PDF 表格抽取
+pip install py-idp[ocr]           # tesseract 兜底，用于噪点较多的扫描件
 pip install py-idp[openai]       # OpenAI SDK（同时也用于 8 个中国 LLM）
 pip install py-idp[anthropic]    # Anthropic SDK
-pip install py-idp[api]           # FastAPI 服务器（idp.api:app，生产可用）
+pip install py-idp[ollama]       # Ollama 客户端
+pip install py-idp[china]        # 通过 OpenAI 兼容协议接入 8 家中国大模型
 pip install py-idp[hf-vlm]        # 自托管 Nanonets-OCR2-3B（Apple Silicon / CUDA）
-pip install py-idp[dev]          # pytest + ruff + mypy
+pip install py-idp[api]           # FastAPI 服务器（idp.api:app，生产可用）
+pip install py-idp[pdf-render]    # PDF → 图像渲染，供多模态后端使用
+pip install py-idp[eval]          # datasets + pandas，用于 `idp eval`
+pip install py-idp[dev]           # pytest + ruff + mypy + hypothesis + pytest-benchmark
+pip install py-idp[docs]          # mkdocs + mkdocstrings，用于本地构建文档站点
 ```
+
+组合安装：`pip install py-idp[docling,anthropic,eval,dev]`。
 
 > 安装与运行测试套件均无需 API Key——`MockBackend` 已内置。
 > `tiktoken` 由核心包自动安装（用于基于 token 预算的分块）。
