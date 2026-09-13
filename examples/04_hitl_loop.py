@@ -5,7 +5,7 @@
 # with the following addition: a commercial license is also available for organizations
 # that wish to embed py-idp in proprietary products or hosted SaaS without the AGPL
 # copyleft obligations. See LICENSE and LICENSE-COMMERCIAL at the repo root, or
-# contact <royce-license-placeholder@protonmail.com> for terms.
+# contact <roycelam@umich.edu> for terms.
 #
 # This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
 # SPDX-License-Identifier: AGPL-3.0-or-later
