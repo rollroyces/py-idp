@@ -9,9 +9,9 @@ hide:
 
 Six-stage pipeline (parse → classify → extract → assess → validate → HITL), 12+ LLM backends, Pydantic-schema-driven extraction, built-in eval harness, self-hosted OCR via Nanonets-OCR2-3B, auto-chunking for oversized documents, and AI-driven schema discovery.
 
-[:material-rocket-launch: Getting started](getting-started/installation.md){ .md-button .md-button--primary }
-[:fontawesome-brands-github: View on GitHub](https://github.com/rollroyces/py-idp){ .md-button }
-[:fontawesome-brands-python: Install from PyPI](https://pypi.org/project/py-idp/){ .md-button }
+[Getting started](getting-started/installation.md){ .md-button .md-button--primary }
+[View on GitHub](https://github.com/rollroyces/py-idp){ .md-button }
+[Install from PyPI](https://pypi.org/project/py-idp/){ .md-button }
 
 ---
 
