@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', monospace" role="img" aria-label="py-idp pipeline running on a sample invoice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="280" rx="8" fill="url(#bg)"/>
+  <text x="20" y="28" font-size="14" fill="#94a3b8" font-weight="600">$ python -m examples.invoice</text>
+  <text x="20" y="50" font-size="13" fill="#e2e8f0">[parse]      invoice.pdf → 1 page, 1247 chars, 2 tables</text>
+  <text x="20" y="72" font-size="13" fill="#e2e8f0">[classify]   invoice (conf 0.99)</text>
+  <text x="20" y="94" font-size="13" fill="#e2e8f0">[extract]    backend=mock, schema=Invoice</text>
+  <text x="20" y="116" font-size="13" fill="#e2e8f0">[assess]     9 fields, 2 below confidence floor (0.60)</text>
+  <text x="20" y="138" font-size="13" fill="#e2e8f0">[validate]   PASS</text>
+  <text x="20" y="170" font-size="13" fill="#94a3b8">{</text>
+  <text x="40" y="188" font-size="13" fill="#fbbf24">  "invoice_number": "INV-2026-001",</text>
+  <text x="40" y="206" font-size="13" fill="#fbbf24">  "vendor_name":    "Acme Widgets Ltd.",</text>
+  <text x="40" y="224" font-size="13" fill="#fbbf24">  "total_amount":   540.00,</text>
+  <text x="40" y="242" font-size="13" fill="#f87171">  "subtotal":       0.0,    <tspan fill="#64748b">// conf 0.10 — needs review</tspan></text>
+  <text x="40" y="260" font-size="13" fill="#f87171">  "tax_amount":     0.0,    <tspan fill="#64748b">// conf 0.10 — needs review</tspan></text>
+  <text x="20" y="278" font-size="13" fill="#94a3b8">}</text>
+</svg>

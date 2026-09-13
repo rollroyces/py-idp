@@ -7,7 +7,7 @@ message: >-
   IBM Docling (arXiv:2408.09869).
 type: software
 title: "py-idp"
-version: 0.3.1
+version: 0.3.1.post1
 date-released: 2026-09-10
 license: AGPL-3.0-or-later
 license-url: https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL
@@ -36,4 +36,4 @@ preferred-citation:
       alias: "rollroyces"
   year: 2026
   url: "https://github.com/rollroyces/py-idp"
-  version: 0.3.1
+  version: 0.3.1.post1

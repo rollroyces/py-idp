@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img" aria-label="Streamlit HITL review UI for py-idp">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f1f5f9"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="320" rx="8" fill="url(#bg2)" stroke="#cbd5e1"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="900" height="48" rx="8" fill="#0f172a"/>
+  <text x="20" y="30" font-size="14" fill="#f1f5f9" font-weight="700">py-idp · HITL Review</text>
+  <text x="780" y="30" font-size="13" fill="#94a3b8">Receipt queue: 3 of 7</text>
+
+  <!-- left column: original doc preview -->
+  <rect x="20" y="68" width="280" height="232" rx="4" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="32" y="88" font-size="11" fill="#64748b" font-weight="600">DOCUMENT</text>
+  <text x="32" y="110" font-size="12" fill="#0f172a" font-family="monospace">Blue Bottle Coffee</text>
+  <text x="32" y="128" font-size="12" fill="#0f172a" font-family="monospace">221 East 12th Street</text>
+  <text x="32" y="146" font-size="12" fill="#0f172a" font-family="monospace">Date: 2025-03-14 09:42</text>
+  <text x="32" y="180" font-size="11" fill="#475569" font-family="monospace">1 Latte          $5.50</text>
+  <text x="32" y="196" font-size="11" fill="#475569" font-family="monospace">1 Croissant      $4.25</text>
+  <text x="32" y="212" font-size="11" fill="#475569" font-family="monospace">1 Sparkling      $3.00</text>
+  <text x="32" y="244" font-size="11" fill="#0f172a" font-family="monospace" font-weight="700">Subtotal   $12.75</text>
+  <text x="32" y="260" font-size="11" fill="#0f172a" font-family="monospace" font-weight="700">Tax        $1.10</text>
+  <text x="32" y="276" font-size="11" fill="#0f172a" font-family="monospace" font-weight="700">Total     $13.85</text>
+
+  <!-- right column: extraction editor -->
+  <rect x="320" y="68" width="560" height="232" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="332" y="88" font-size="11" fill="#64748b" font-weight="600">EXTRACTION — needs review (2 fields below 0.60 confidence)</text>
+
+  <!-- field rows -->
+  <text x="332" y="116" font-size="12" fill="#0f172a" font-family="monospace">merchant_name</text>
+  <rect x="450" y="104" width="200" height="20" rx="3" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="458" y="118" font-size="12" fill="#166534" font-family="monospace">Blue Bottle Coffee</text>
+  <text x="660" y="118" font-size="11" fill="#16a34a" font-family="monospace">0.95 ✓</text>
+
+  <text x="332" y="146" font-size="12" fill="#0f172a" font-family="monospace">date</text>
+  <rect x="450" y="134" width="200" height="20" rx="3" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="458" y="148" font-size="12" fill="#166534" font-family="monospace">2025-03-14</text>
+  <text x="660" y="148" font-size="11" fill="#16a34a" font-family="monospace">0.92 ✓</text>
+
+  <text x="332" y="176" font-size="12" fill="#0f172a" font-family="monospace">subtotal</text>
+  <rect x="450" y="164" width="200" height="20" rx="3" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="458" y="178" font-size="12" fill="#991b1b" font-family="monospace">0.00</text>
+  <text x="660" y="178" font-size="11" fill="#dc2626" font-family="monospace">0.10 ✗</text>
+
+  <text x="332" y="206" font-size="12" fill="#0f172a" font-family="monospace">total</text>
+  <rect x="450" y="194" width="200" height="20" rx="3" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="458" y="208" font-size="12" fill="#991b1b" font-family="monospace">0.00</text>
+  <text x="660" y="208" font-size="11" fill="#dc2626" font-family="monospace">0.10 ✗</text>
+
+  <text x="332" y="236" font-size="11" fill="#64748b">Approve + mark reviewed</text>
+  <rect x="332" y="250" width="120" height="28" rx="4" fill="#0f172a"/>
+  <text x="352" y="269" font-size="12" fill="#f1f5f9" font-weight="600">Save review</text>
+  <rect x="464" y="250" width="120" height="28" rx="4" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="492" y="269" font-size="12" fill="#0f172a">Skip</text>
+</svg>
