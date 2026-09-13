@@ -93,3 +93,7 @@ Full table with API-key requirements: [examples/README.md](https://github.com/ro
 - **v0.3.1** shipped ([release notes](https://github.com/rollroyces/py-idp/releases/tag/v0.3.1))
 - **508 tests**, mypy clean (59 files), ruff clean
 - Dual-licensed: [AGPL-3.0-or-later](https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL) (open-source) and a [commercial license](https://github.com/rollroyces/py-idp/blob/main/LICENSE-COMMERCIAL) for closed-source embedding.
+
+## Maintainer
+
+Royce Lam · [@rollroyces](https://github.com/rollroyces) · <roycelam@umich.edu>

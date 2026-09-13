@@ -733,7 +733,7 @@ Indicative commercial pricing:
 | Enterprise | unlimited developers + SLA + support | contact |
 | SaaS-OEM | embed in a hosted SaaS, per active user | per-seat |
 
-Contact **rollroyces** for a signed agreement.
+Contact **Royce Lam** ([roycelam@umich.edu](mailto:roycelam@umich.edu)) for a signed agreement.
 
 ---
 
@@ -745,3 +745,9 @@ Contact **rollroyces** for a signed agreement.
 - Multi-format chunking patterns — from [`Unstructured-IO/unstructured`](https://github.com/Unstructured-IO/unstructured)
 
 If you cite py-idp in research, please cite this repo and Docling.
+
+---
+
+## Maintainer
+
+Royce Lam · [@rollroyces](https://github.com/rollroyces) · <roycelam@umich.edu>

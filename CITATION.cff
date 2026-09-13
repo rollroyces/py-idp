@@ -7,7 +7,7 @@ message: >-
   IBM Docling (arXiv:2408.09869).
 type: software
 title: "py-idp"
-version: 0.3.0
+version: 0.3.1
 date-released: 2026-09-10
 license: AGPL-3.0-or-later
 license-url: https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL
@@ -23,17 +23,17 @@ keywords:
   - rag
   - information-extraction
 authors:
-  - family-names: "Yao"
+  - family-names: "Lam"
     given-names: "Royce"
     alias: "rollroyces"
-    orcid: "https://orcid.org/0000-0000-0000-0000"
+    email: "roycelam@umich.edu"
 preferred-citation:
   type: software
   title: "py-idp: a general-purpose, AI-enabled Intelligent Document Processing framework for Python"
   authors:
-    - family-names: "Yao"
+    - family-names: "Lam"
       given-names: "Royce"
       alias: "rollroyces"
   year: 2026
   url: "https://github.com/rollroyces/py-idp"
-  version: 0.3.0
+  version: 0.3.1

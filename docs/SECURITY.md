@@ -22,6 +22,9 @@ profile) with:
 2. A minimal reproduction (script, sample document, or trace).
 3. The affected version (commit SHA or `pip show py-idp | grep Version`).
 
+If the noreply relay is unreachable for any reason, you can also reach
+the maintainer at <roycelam@umich.edu>.
+
 I aim to acknowledge within **72 hours** and ship a fix or mitigation
 within **14 days** for critical issues (RCE, credential leakage,
 arbitrary code execution via crafted input). Lower-severity issues

@@ -657,7 +657,7 @@ py-idp **双重许可**：
 | Enterprise | 不限开发者数量 + SLA + 技术支持 | 联系商务 |
 | SaaS-OEM | 嵌入托管 SaaS，按活跃用户数计费 | 按席位计费 |
 
-请联系 **rollroyces** 获取签约。
+请联系 **Royce Lam**（[roycelam@umich.edu](mailto:roycelam@umich.edu)）获取签约。
 
 ---
 
@@ -668,4 +668,10 @@ py-idp **双重许可**：
 - Pydantic Schema 驱动的抽取 API —— 灵感来自 [`run-llama/llama_cloud_services`](https://github.com/run-llama/llama_cloud_services)
 - 多格式分块模式 —— 来自 [`Unstructured-IO/unstructured`](https://github.com/Unstructured-IO/unstructured)
 
-如果研究中引用了 py-idp，请同时引用本仓库与 Docling。
+如果你在研究中引用 py-idp，请同时引用本仓库与 Docling。
+
+---
+
+## 维护者
+
+Royce Lam · [@rollroyces](https://github.com/rollroyces) · <roycelam@umich.edu>
