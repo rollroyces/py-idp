@@ -10,9 +10,20 @@
 # This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Example: batch-process multiple documents and save JSON output."""
+"""Example: batch-process multiple documents and save JSON output.
+
+What this shows:
+  - Iterating over a list of (path, schema) pairs.
+  - Per-document Pipeline construction with the right schema.
+  - save_result() to persist each run as JSON for downstream tooling.
+  - Output goes to examples/output/{stem}.json.
+
+Run:
+    python examples/05_batch.py
+"""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from idp._util import pretty_print_result
@@ -26,6 +37,9 @@ DOCS = [
     ("src/idp/eval/datasets/invoices/docs/inv-002.txt", "Invoice"),
     ("src/idp/eval/datasets/contracts/docs/svc-001.txt", "Contract"),
 ]
+
+# Quiet the validation-error spam that MockBackend's empty defaults produce.
+logging.getLogger("idp").setLevel(logging.CRITICAL)
 
 
 def main() -> None:
@@ -44,3 +58,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

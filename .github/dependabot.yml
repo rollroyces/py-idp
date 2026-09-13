@@ -1,0 +1,51 @@
+version: 2
+updates:
+  # GitHub Actions: bump actions/setup-python, actions/checkout, etc.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Group all actions updates into a single PR (instead of one per action).
+    groups:
+      actions-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Python dependencies declared in pyproject.toml.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Group minor + patch updates into one PR; major bumps go alone.
+    groups:
+      python-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Don't auto-bump anything pinned to <2.0 for safety: the project
+    # itself uses pydantic ^2 internally so the deps should follow.
+    ignore:
+      # Keep on stable, don't follow dev releases
+      - dependency-name: "*"
+        versions:
+          - "0.x"
+          - "1.x"
+          - ">=3.0.0.a0,<3.0.0"
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+    # Limit open PRs from this ecosystem so we don't drown the queue.
+    open-pull-requests-limit: 5

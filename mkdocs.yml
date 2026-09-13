@@ -1,0 +1,114 @@
+site_name: py-idp
+site_description: >-
+  General-purpose, AI-enabled Intelligent Document Processing for Python.
+  12+ LLM backends, Pydantic-schema-driven, with self-hosted OCR
+  (Nanonets-OCR2-3B), auto-schema discovery, and HITL review.
+site_url: https://rollroyces.github.io/py-idp/
+repo_url: https://github.com/rollroyces/py-idp
+repo_name: rollroyces/py-idp
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            members_order: source
+            separate_signature: true
+            unwrap_annotated: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - 30-second tour: getting-started/30-second-tour.md
+  - User guide:
+      - Pipeline overview: user-guide/pipeline-overview.md
+      - Backends: user-guide/backends.md
+      - Auto-chunking: user-guide/auto-chunking.md
+      - Auto-schema discovery: user-guide/auto-schema-discovery.md
+      - Reliability features: user-guide/reliability.md
+      - Eval harness: user-guide/eval-harness.md
+  - Production:
+      - Production deployment: PRODUCTION.md
+      - Multi-region & HA: MULTI_REGION.md
+      - Security policy: SECURITY.md
+  - Reference:
+      - API: reference/api.md
+  - Project:
+      - Contributing: CONTRIBUTING.md
+      - Changelog: https://github.com/rollroyces/py-idp/blob/main/CHANGELOG.md
+      - License: https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL
+      - Commercial license: https://github.com/rollroyces/py-idp/blob/main/LICENSE-COMMERCIAL
+  - Operations:
+      - PyPI setup: PYPI_SETUP.md
+  - Blog:
+      - Posts: blog/index.md
+      - v0.3.1 launch: blog/launch-0.3.1.md
+      - Launch cross-posts: blog/launch-cross-posts.md
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rollroyces/py-idp
+      name: GitHub

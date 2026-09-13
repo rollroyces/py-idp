@@ -250,6 +250,8 @@ idp eval --dataset src/idp/eval/datasets/invoices \
 idp serve                                              # launch Streamlit HITL UI on :8501
 ```
 
+For copy-pasteable scripts that show each backend / pipeline pattern end-to-end, see [`examples/`](examples/README.md) — every numbered example is runnable offline with `python examples/NN_*.py` and falls back to `MockBackend` if no API key is set.
+
 ---
 
 ## Bring your own schema
