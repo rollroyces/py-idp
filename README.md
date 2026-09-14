@@ -799,6 +799,8 @@ Indicative commercial pricing:
 
 Contact **Royce Lam** ([roycelam@umich.edu](mailto:roycelam@umich.edu)) for a signed agreement.
 
+**Named-entity carve-out.** Chinachem Group Holdings Limited (HK) and its covered subsidiaries hold a pre-paid commercial license on Enterprise terms (fee waived, revocable on material breach or change of control). See §9 of `LICENSE-COMMERCIAL`. This is a one-off business arrangement — it does **not** extend to any other entity.
+
 ---
 
 ## Acknowledgments

@@ -84,6 +84,110 @@ This Agreement is governed by the laws of the jurisdiction in which
 the Licensor resides. Disputes shall be resolved in the courts of that
 jurisdiction.
 
+§9. Named-Entity Carve-Out (Chinachem Group)
+
+This section grants a pre-paid commercial license to a specific
+named entity and its covered affiliates. The terms below are
+**non-negotiable** as written; if the named entity needs different
+terms, they must enter into a separate written agreement under §1
+above. The carve-out exists to acknowledge a specific business
+relationship and is NOT a template for general free-licensing.
+
+  9.1 Named Entity.
+    "Chinachem Group" means:
+      (a) Chinachem Group Holdings Limited, a company incorporated
+          in Hong Kong (BR No. [REDACTED — fill in from Companies
+          Registry before signing]), with its registered office at
+          [REDACTED — fill in registered address before signing];
+      (b) each entity in which Chinachem Group Holdings Limited
+          directly or indirectly owns more than 50% of the voting
+          equity ("Subsidiaries");
+      (c) each joint venture or consortium in which Chinachem Group
+          Holdings Limited or any Subsidiary holds majority control
+          AND which has been disclosed in writing to the Licensor
+          before first use of the Software under this carve-out
+          ("Disclosed Affiliates").
+
+  9.2 Grant.
+    Subject to §9.4 (Term and Termination) below, Chinachem Group
+    receives a worldwide, non-exclusive, non-transferable license to
+    exercise every right granted in §1 above, on the same terms as a
+    paid "Enterprise" tier Licensee, with the following adjustments:
+
+      (a) Fees. No fees are payable for the rights granted under
+          this §9. The license fee is treated as zero for so long
+          as this section remains in force.
+      (b) Tier. Chinachem Group is deemed to hold the "Enterprise"
+          tier, including unlimited developers within the named
+          entity and its covered Subsidiaries and Disclosed
+          Affiliates.
+      (c) Source-available. The Software may be used, modified, and
+          embedded in Chinachem Group's products and hosted
+          services without AGPL copyleft obligations, on the same
+          terms as a paid Licensee.
+
+  9.3 Carve-Out Scope (What This Section Does NOT Do).
+    This §9 does NOT:
+      (a) grant any rights to entities that are not Chinachem Group
+          Holdings Limited, its Subsidiaries, or its Disclosed
+          Affiliates as defined in §9.1;
+      (b) authorize redistribution of the Software, in source or
+          object form, as a stand-alone product, library, or
+          service offered to third parties (the restrictions of §2
+          apply in full);
+      (c) authorize use of the Licensor's name, trademarks, or
+          logos (the restriction of §2(c) applies in full);
+      (d) survive a change of control of Chinachem Group Holdings
+          Limited to a third party that is not itself a covered
+          Subsidiary — see §9.4(c) below;
+      (e) constitute a general open-source license. The Software
+          remains source-available under the terms of this
+          Agreement, NOT open-source.
+
+  9.4 Term and Termination.
+    (a) Effective Date. This §9 is effective as of the date first
+        set forth above. (See header.)
+    (b) Duration. The grant in §9.2 continues until terminated
+        under this §9.4.
+    (c) Termination on Change of Control. If a third party that is
+        not a Subsidiary acquires direct or indirect control of
+        more than 50% of the voting equity of Chinachem Group
+        Holdings Limited, this §9 terminates automatically 30 days
+        after that change of control. During those 30 days
+        Chinachem Group may continue use; thereafter it must
+        negotiate a new agreement under §1 or cease use.
+    (d) Termination on Breach. The Licensor may terminate this §9
+        by written notice to Chinachem Group if Chinachem Group
+        materially breaches §2, §3, §5, or §9.3, and fails to cure
+        the breach within 30 days of notice. Upon termination under
+        this §9.4(d), all rights granted by this §9 cease and
+        Chinachem Group's use of the Software is thereafter
+        governed solely by LICENSE-AGPL (the open-source path).
+    (e) Effect of Termination. Upon termination, the provisions
+        of §7 (Term and Termination) apply mutatis mutandis to the
+        rights granted by this §9.
+
+  9.5 Identification and Notice.
+    To exercise rights under this §9, Chinachem Group must identify
+    itself in any software, hosted service, or product that embeds
+    the Software by including, in a location visible to end users or
+    operators of that product or service, a notice substantially in
+    the following form:
+
+        "This product uses py-idp, used under license from the
+         author. py-idp is also available under the AGPL-3.0
+         open-source license."
+
+    Failure to include this notice is not itself a breach, but the
+    Licensor may treat persistent omission as a §9.4(d) material
+    breach after 30 days' written notice.
+
+  9.6 No Implied Waiver.
+    The existence of this §9 does not waive, weaken, or modify any
+    of the Licensor's rights against any other party, including any
+    other entity that may share a name with or be related to
+    Chinachem Group but does not fall within the definition in §9.1.
+
 ──────────────────────────────────────────────────────────────────────
 
 To obtain a signed Commercial License Agreement, contact:

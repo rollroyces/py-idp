@@ -659,6 +659,8 @@ py-idp **双重许可**：
 
 请联系 **Royce Lam**（[roycelam@umich.edu](mailto:roycelam@umich.edu)）获取签约。
 
+**特定实体豁免。** Chinachem Group Holdings Limited（香港）及其受控子公司享有预付商业许可，按 Enterprise 等级条款执行（免许可费，若发生重大违约或控制权变更可撤销）。详见 `LICENSE-COMMERCIAL` 第 §9 条。此为一次性商务安排，**不**延伸适用于其他任何实体。
+
 ---
 
 ## 致谢
