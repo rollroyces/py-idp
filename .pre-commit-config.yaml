@@ -1,0 +1,16 @@
+# pre-commit.ci configuration
+#
+# Runs the local .githooks/pre-commit script on every PR. Without
+# this, PRs from forks can land without the build-artifact check
+# (because fork contributors don't have the hook installed locally).
+#
+# See https://pre-commit.ci/ for details.
+repos:
+  - repo: local
+    hooks:
+      - id: block-build-artifacts
+        name: Block build artifacts from being committed
+        entry: .githooks/pre-commit
+        language: system
+        pass_filenames: false
+        always_run: true
