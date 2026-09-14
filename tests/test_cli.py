@@ -368,9 +368,19 @@ def test_serve_invokes_streamlit(monkeypatch, tmp_path: Path) -> None:
 # `idp discover-schema` command
 # ---------------------------------------------------------------------------
 def test_discover_schema_help_shows_options() -> None:
-    """--help lists the options without crashing."""
+    """--help lists the options without crashing.
+
+    The help output goes through Rich for terminal coloring. We strip
+    ANSI escape codes before substring matching so the test works in
+    any environment (CI runners often have no TTY / different TERM
+    settings, and the byte sequence differs).
+    """
+    import re
+
     result = runner.invoke(app, ["discover-schema", "--help"])
     assert result.exit_code == 0
-    assert "--hint" in result.stdout
-    assert "--backend" in result.stdout
-    assert "--output" in result.stdout
+    # Strip ANSI escape codes (\x1b[...m etc.)
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    assert "--hint" in clean
+    assert "--backend" in clean
+    assert "--output" in clean
