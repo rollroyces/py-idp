@@ -53,6 +53,10 @@ class Settings:
     max_upload_bytes: int = 25 * 1024 * 1024  # 25 MB
     max_pdf_pages: int = 100
 
+    # Templates
+    template_dir: str = "templates"  # relative to CWD or absolute
+    template_reload: bool = False  # dev mode only: hot-reload .md files
+
     # Observability
     log_level: str = "INFO"
     log_format: str = "human"  # human | json
@@ -95,6 +99,10 @@ class Settings:
         # Uploads
         kwargs["max_upload_bytes"] = _validate_int("IDP_MAX_UPLOAD_BYTES", e.get("IDP_MAX_UPLOAD_BYTES"), default=s.max_upload_bytes, min_v=1024, max_v=1024**3)
         kwargs["max_pdf_pages"] = _validate_int("IDP_MAX_PDF_PAGES", e.get("IDP_MAX_PDF_PAGES"), default=s.max_pdf_pages, min_v=1, max_v=10_000)
+
+        # Templates
+        kwargs["template_dir"] = e.get("IDP_TEMPLATE_DIR", s.template_dir)
+        kwargs["template_reload"] = _validate_bool("IDP_TEMPLATE_RELOAD", e.get("IDP_TEMPLATE_RELOAD"), default=s.template_reload)
 
         # Observability
         kwargs["log_level"] = _validate_choice("IDP_LOG_LEVEL", e.get("IDP_LOG_LEVEL"), choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"), default=s.log_level)

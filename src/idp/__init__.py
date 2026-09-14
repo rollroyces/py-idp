@@ -25,7 +25,9 @@ Design draws from:
 
 from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
+from idp.errors import IDPError, error_envelope
 from idp.pipeline.pipeline import Pipeline, PipelineResult
+from idp.templates import Template, TemplateRegistry, load_template
 
 # Kept in sync with `version` in pyproject.toml.
 # pyproject.toml is the source of truth (used by `python -m build` and
@@ -36,8 +38,13 @@ __all__ = [
     "Block",
     "DiscoveryResult",
     "Document",
+    "IDPError",
     "Page",
     "Pipeline",
     "PipelineResult",
+    "Template",
+    "TemplateRegistry",
     "discover_schema",
+    "error_envelope",
+    "load_template",
 ]

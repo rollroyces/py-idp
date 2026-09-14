@@ -157,7 +157,11 @@ def test_rate_limit_enforced_after_threshold(tmp_path, monkeypatch, sample_doc):
         r = c.post("/extract", files=files, data={"schema_name": "Invoice"},
                    headers={"X-API-Key": "k"})
         assert r.status_code == 429
-        assert "limit exceeded" in r.json()["error"]
+        # New structured error envelope: `error` is a dict, not a string
+        body = r.json()
+        assert body["error"]["code"] == "IDP-RATE-001"
+        assert "limit exceeded" in body["error"]["message"]
+        assert "request_id" in body["error"]
 
 
 # ---------------------------------------------------------------------------
