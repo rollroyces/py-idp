@@ -1,0 +1,115 @@
+#!/bin/sh
+#
+# pre-commit hook: block commits that try to add generated/build artifacts.
+#
+# Recurring bug we've hit: `git add -A` with no path filter picks up
+# files in the `site/` directory (mkdocs build output, ~4 MB) which
+# then get force-pushed. Even though `.gitignore` lists `site/`,
+# `git add -A site/` from inside the repo adds the directory
+# contents, bypassing gitignore.
+#
+# This hook scans the staged file list for any path that matches a
+# known build-artifact pattern, and aborts the commit if found.
+# Bypass with `git commit --no-verify` for one-off cases.
+#
+# Installed at: .git/hooks/pre-commit
+# Make executable: already is (chmod +x in the install step).
+
+set -e
+
+# Patterns of files/directories that must never be committed.
+# Each pattern is checked against the staged file list.
+BLOCKED_PATTERNS='
+^site/
+^dist/
+^build/
+^\.venv/
+^venv/
+^__pycache__/
+.*\.egg-info/
+.*__pycache__/
+.*\.pyc$
+.*\.pyo$
+.*\.pyd$
+.*\.so$
+.*\.dylib$
+.*\.dll$
+.*\.egg$
+.*\.whl$
+.*\.coverage$
+.*htmlcov/
+.*\.DS_Store$
+.*\.mypy_cache/
+.*\.ruff_cache/
+.*\.pytest_cache/
+.*\.hypothesis/
+.*\.model_cache/
+.*\.cache/
+.*\.venv/
+.*/node_modules/
+.*\.log$
+.*\.tmp$
+.*\.bak$
+.*tmp_
+.*_tmp\.
+'
+
+# Read staged files (Added / Modified / Renamed). Use git's own
+# --diff-filter so deleted-only commits don't trip the hook.
+STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+VIOLATIONS=""
+while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    while IFS= read -r pat; do
+        [ -z "$pat" ] && continue
+        if echo "$file" | grep -Eq "$pat"; then
+            VIOLATIONS="${VIOLATIONS}  ${file}  (matches: ${pat})
+"
+            break
+        fi
+    done <<EOF
+$BLOCKED_PATTERNS
+EOF
+done <<EOF
+$STAGED
+EOF
+
+if [ -n "$VIOLATIONS" ]; then
+    cat >&2 <<EOF
+
+================================================================
+  pre-commit hook: blocked staged build artifacts
+================================================================
+
+The following staged files match known build-artifact patterns and
+should not be committed:
+
+$VIOLATIONS
+
+To fix:
+  1. Unstage them:    git reset HEAD <file>...
+  2. Or add to .gitignore if not already there
+  3. Or bypass:       git commit --no-verify
+
+Common causes:
+  - \`git add -A\` from repo root picks up everything in untracked
+    subdirectories, INCLUDING ignored ones. Use specific paths:
+        git add src/ tests/  (not: git add -A)
+        git add -A -- ':!site/' ':!dist/' ':!build/'
+  - \`git add -A <dir>\` adds the entire directory's contents even
+    if the dir is in .gitignore (path arg overrides gitignore).
+  - mkdocs builds write to \`./site/\` (3-4 MB). Run \`rm -rf site\`
+    before committing, or work from a different directory.
+
+================================================================
+
+EOF
+    exit 1
+fi
+
+exit 0
