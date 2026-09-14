@@ -5,6 +5,54 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.4] — 2026-09-14 — Tier-1 test coverage, branch protection, CI bots
+
+### Added
+
+* **CLI test coverage** — `tests/test_cli.py` (17 tests) covers every
+  command in `idp.pipeline.cli`: `run`, `schemas`, `providers`,
+  `discover-schema`, `eval`, `rl-update`, `rl-eval`, `serve`. Brings
+  the CLI from 0% to 83% line coverage. Tests use Typer's CliRunner
+  so we exercise the actual CLI surface without subprocess overhead.
+* **`InProcessQueue` test coverage** — `tests/test_queue.py` (12 tests)
+  covers job submit/status/list, worker run/failure/recovery, and
+  start/stop idempotency. Brings `queue/jobs.py` from 0% to 97%.
+* **Eval harness test coverage** — `tests/test_eval_runner.py` (11
+  tests) covers dataset loading, schema validation, multiple
+  strategies, missing-doc skipping, and end-to-end runs against the
+  bundled invoices dataset. Brings `eval/runner.py` from 0% to 96%.
+* **Migration audit test coverage** — `tests/test_migrate_audit.py`
+  (6 tests) covers empty DB, all-compatible rows, the headline
+  case (v0.1-OK but v0.2-fails), mixed DBs, output-file writing, and
+  schema-name skipping. Brings `migrate_audit.py` from 0% to 76%.
+
+### Bots and branch protection
+
+* **Branch protection on `main`** — required status checks enforced,
+  linear history required, force-pushes disabled, branch deletion
+  disabled, conversation resolution required. Enforced for admins too,
+  so even direct pushes by the owner need a PR review.
+* **CodeQL workflow** (`.github/workflows/codeql.yml`) — weekly
+  security scan + per-PR scan using GitHub's default security-and-
+  quality query pack. Runs only on Python (no JS/TS to analyze).
+* **CI matrix expanded** — `tests.yml` now runs on Python 3.10 / 3.11
+  / 3.12 / 3.13 / 3.14 (was 3.10–3.12). Matches `pyproject.toml`'s
+  `python = ">=3.10"` declaration and includes the latest stable.
+* **CI build-artifact guard** — `tests.yml` runs a shell check at the
+  start of every CI job that fails the build if `site/` or other
+  build dirs are tracked. Mirrors the local `.githooks/pre-commit`
+  hook so PRs from forks (where the local hook isn't installed) get
+  caught too.
+* **Concurrency** — `.github/workflows/tests.yml` cancels in-progress
+  runs for the same branch when a new commit is pushed. Saves CI
+  minutes.
+
+### Tests
+
+* 46 new tests added across 4 new files. Coverage of the 4
+  user-facing modules that previously had 0% is now between 76% and
+  97%.
+
 ## [0.3.3] — 2026-09-14 — Templates wire to LLM, structured error envelope, README translations
 
 ### Added

@@ -739,7 +739,7 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 558 tests, no API key needed
+pytest -v                       # 604 tests, no API key needed
 ruff check src tests examples   # lint
 mypy src/idp                    # type-check (clean across 59 files)
 
@@ -774,7 +774,7 @@ Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
 the release flow — lives in [`CONTRIBUTING.md`](https://github.com/rollroyces/py-idp/blob/main/CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
-version. CI runs ruff + mypy + 558 tests across Python 3.10 / 3.11 /
+version. CI runs ruff + mypy + 604 tests across Python 3.10 / 3.11 /
 3.12 on every PR.
 
 ---
