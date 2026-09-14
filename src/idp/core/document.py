@@ -78,6 +78,11 @@ class Document:
     confidence: dict[str, float] | None = None
     validation: dict[str, Any] | None = None
     mode: str | None = None  # 'multimodal' | 'ocr_llm' (chosen by router)
+    # Template provenance: which template (if any) was used to produce
+    # this extraction. Recorded so audit / batch re-runs can answer
+    # "which template version produced this row?" without re-running.
+    template_name: str | None = None
+    template_version: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 

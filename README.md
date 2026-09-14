@@ -380,6 +380,70 @@ for a runnable end-to-end demo.
 
 ---
 
+## Templates per PDF type (LLM context via Markdown)
+
+For each document type you process, write a `templates/invoice.md` /
+`templates/contract.md` file. The Markdown body becomes **LLM context
+on every extraction call** — field descriptions, worked examples,
+common-mistakes notes. JSON Schema alone can't express "subtotal and
+total_amount are NOT the same — subtract tax to get subtotal", but a
+template can.
+
+```yaml
+# templates/invoice.md
+---
+name: invoice
+schema: Invoice
+version: 1
+mime_types: [application/pdf, image/jpeg]
+filename_patterns: ["*invoice*", "*receipt*"]
+---
+
+# Invoice
+
+## Fields
+
+* **vendor_name** — the company issuing the invoice. Look for the
+  largest bold text near the top.
+* **invoice_number** — usually near the top, format varies
+  (`INV-2024-001`, `2024-09-15-001`).
+* **subtotal** — sum of line items, BEFORE tax.
+* **total_amount** — final amount including tax. **NOT** the subtotal.
+
+## Common mistakes
+
+* **subtotal vs total_amount**: subtract `tax_amount` from
+  `total_amount` to get `subtotal`. If the invoice only shows one,
+  leave the other as `null`.
+* **date_due vs date_issued**: due date is usually later than issued.
+```
+
+```python
+from idp import Pipeline
+from idp.templates import TemplateRegistry
+
+registry = TemplateRegistry.load("./templates")
+pipe = Pipeline(backend="nanonets", schema="Invoice", template="invoice")
+pipe.set_template_registry(registry)
+result = pipe.run(scan_path)  # template body prepended to LLM prompt
+print(result.template_name, result.template_version)
+```
+
+When you `POST /extract` without pinning `schema_name`, the server
+auto-picks the right template by filename + MIME and uses its body
+as LLM context. The matched template is recorded in
+`PipelineResult.template_name` + `template_version` for audit.
+
+Three sample templates ship in `templates/`:
+[`invoice.md`](templates/invoice.md),
+[`contract.md`](templates/contract.md),
+[`bank_statement.md`](templates/bank_statement.md).
+See [`src/idp/templates.py`](src/idp/templates.py) and
+[`tests/test_template_to_llm.py`](tests/test_template_to_llm.py) for
+the full API.
+
+---
+
 ## Chunking for oversized documents
 
 Most LLMs cap context at 6k-200k tokens. A long invoice, contract, or
@@ -675,7 +739,7 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 508 tests, no API key needed
+pytest -v                       # 558 tests, no API key needed
 ruff check src tests examples   # lint
 mypy src/idp                    # type-check (clean across 59 files)
 
@@ -710,7 +774,7 @@ Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
 the release flow — lives in [`CONTRIBUTING.md`](https://github.com/rollroyces/py-idp/blob/main/CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
-version. CI runs ruff + mypy + 508 tests across Python 3.10 / 3.11 /
+version. CI runs ruff + mypy + 558 tests across Python 3.10 / 3.11 /
 3.12 on every PR.
 
 ---

@@ -143,8 +143,22 @@ def _build_messages(
     text: str,
     images_b64: list[str],
     extra_instructions: str = "",
+    template_body: str = "",
 ) -> list[Message]:
-    """Build the chat messages for an extraction call."""
+    """Build the chat messages for an extraction call.
+
+    When ``template_body`` is non-empty, its contents are prepended to
+    the user message — the LLM sees the operator-authored field
+    descriptions, worked examples, and common-mistakes notes *before*
+    the schema. This is the whole point of the template registry: it
+    gives the LLM document-type-specific guidance that the schema
+    alone can't express (e.g. "subtotal and total_amount are NOT the
+    same — subtract tax to get subtotal").
+
+    Token budget note: a 500-line template body costs ~1500 tokens at
+    3 chars/token. We cap it at ~2000 tokens (8192 chars) so a
+    verbose template can't blow the 16k-context Nanonets-OCR2 budget.
+    """
     schema_name = schema.__name__
     schema_json = _schema_json_cached(schema)
     # Cap text to ~3000 tokens — enough for a typical invoice page,
@@ -153,9 +167,18 @@ def _build_messages(
     # because dense text (numbers, currency, base64) gives 1 token
     # per ~1 char; a char-slice would silently overshoot the budget.
     text_chunk = _truncate_to_tokens(text, max_tokens=3000)
+    # Template body: cap to ~2000 tokens. Markdown renders well even
+    # when truncated mid-section, so a hard slice is acceptable.
+    template_chunk = _truncate_to_tokens(template_body, max_tokens=2000) if template_body else ""
+    template_block = f"""Template-specific guidance for this document type:
+\"\"\"
+{template_chunk}
+\"\"\"
+
+""" if template_chunk else ""
     user_content = f"""Extract data from the document below into the schema `{schema_name}`.
 
-Output JSON Schema:
+{template_block}Output JSON Schema:
 {schema_json}
 
 Output rules:
@@ -276,12 +299,32 @@ def extract(
     backend: Backend,
     mode: ExtractionMode | str | None = None,
     extra_instructions: str = "",
+    template_body: str = "",
+    template_name: str | None = None,
+    template_version: int | None = None,
 ) -> Document:
-    """Run the extraction stage. Sets doc.extraction and doc.extraction_schema."""
+    """Run the extraction stage. Sets doc.extraction and doc.extraction_schema.
+
+    When ``template_body`` is provided, it is prepended to every LLM
+    call's user message so the model sees document-type-specific
+    guidance (field descriptions, worked examples, common-mistakes
+    notes) before the JSON Schema. ``template_name`` and
+    ``template_version`` are recorded on ``doc`` for audit; they're
+    not sent to the LLM (the body already contains the version in
+    its prose).
+    """
     if mode is None:
         mode = doc.mode or ExtractionMode.OCR_LLM
     if isinstance(mode, str):
         mode = ExtractionMode(mode)
+
+    # Record template provenance on the document — useful for audit
+    # ("which template version produced this extraction?") and for
+    # batch re-runs against a new template version.
+    if template_name is not None:
+        doc.template_name = template_name
+    if template_version is not None:
+        doc.template_version = template_version
 
     images_b64: list[str] = []
     text = doc.raw_text or ""
@@ -318,6 +361,7 @@ def extract(
                  _doc_size(doc, text, images_b64, mode), len(chunks), doc.source_path)
         per_chunk_dicts = _extract_chunks(chunks, schema, backend,
                                           extra_instructions=extra_instructions,
+                                          template_body=template_body,
                                           doc=doc)
         merged = _validate_and_merge_chunks(per_chunk_dicts, schema, doc)
         doc.extraction = merged
@@ -327,7 +371,9 @@ def extract(
         return doc
 
     # Single-chunk path: unchanged from before
-    messages = _build_messages(schema, text, images_b64, extra_instructions=extra_instructions)
+    messages = _build_messages(schema, text, images_b64,
+                                extra_instructions=extra_instructions,
+                                template_body=template_body)
     req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
     raw = ""
     try:
@@ -447,6 +493,7 @@ def _extract_chunks(
     *,
     extra_instructions: str,
     doc: Document,
+    template_body: str = "",
 ) -> list[dict[str, Any]]:
     """Call backend.complete() once per chunk; return list of parsed dicts.
 
@@ -454,6 +501,13 @@ def _extract_chunks(
     contributes an empty dict — so a single bad chunk doesn't kill the
     whole batch. This matches the user's "process 1000 docs / month"
     resilience ask.
+
+    The template body (if any) is included with EVERY chunk call —
+    not just the first. Each chunk's LLM call needs the field
+    descriptions and worked examples to extract correctly. This
+    roughly doubles the prompt cost vs. no-template, but the LLM
+    accuracy on a 10-page document split into 4 chunks without
+    template context is catastrophic — see test_template_body_in_all_chunks.
     """
     out: list[dict[str, Any]] = []
     for i, (text, images) in enumerate(chunks):
@@ -461,7 +515,8 @@ def _extract_chunks(
             out.append({})
             continue
         messages = _build_messages(schema, text, images,
-                                   extra_instructions=extra_instructions)
+                                   extra_instructions=extra_instructions,
+                                   template_body=template_body)
         req = CompletionRequest(messages=messages, json_mode=True, temperature=0.0)
         try:
             raw = backend.complete(req)

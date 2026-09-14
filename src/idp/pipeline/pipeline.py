@@ -69,6 +69,8 @@ class PipelineResult:
     classification: str | None
     confidence: dict[str, float] | None
     validation_passed: bool
+    template_name: str | None = None
+    template_version: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,13 +83,21 @@ class PipelineResult:
             "extraction": self.document.extraction,
             "confidence": self.confidence,
             "validation": self.document.validation,
+            "template_name": self.template_name,
+            "template_version": self.template_version,
             "errors": self.document.errors,
             "timings": [{"name": t.name, "seconds": t.seconds, **t.extra} for t in self.timings],
         }
 
 
 class Pipeline:
-    """Compose the six stages. Each stage can be skipped via flags."""
+    """Compose the six stages. Each stage can be skipped via flags.
+
+    Template support: pass a :class:`idp.templates.Template` (or a
+    string name resolved against a registry) and the template's
+    Markdown body is prepended to every LLM extraction call as
+    document-type-specific guidance. See ``idp/templates.py``.
+    """
 
     def __init__(
         self,
@@ -100,6 +110,7 @@ class Pipeline:
         policy_path: str | None = None,
         retry: RetryConfig | bool = False,
         cache: ExtractionCache | bool = False,
+        template: Any = None,  # idp.templates.Template | str | None
     ):
         # Resolve backend to a real object first, then optionally wrap it
         # with retry + cache. We wrap lazily (not at construction) so the
@@ -144,6 +155,25 @@ class Pipeline:
         self.parser_name = parser if isinstance(parser, str) else None
         self.use_llm_confidence = use_llm_confidence
         self.business_rules = business_rules or []
+        # Template: accept either a Template object, a string name
+        # (loaded from the in-process registry if set via
+        # ``Pipeline.set_template_registry``), or None for no template.
+        # The body is read at run() time, not at construction, so the
+        # template can be edited and hot-reloaded between calls.
+        self._template_obj: Any = None
+        self._template_name: str | None = None
+        self._template_body: str = ""
+        self._template_version: int | None = None
+        self._template_registry: Any = None
+        if template is not None:
+            if isinstance(template, str):
+                self._template_name = template
+            else:
+                # Assume it's a Template-shaped object
+                self._template_obj = template
+                self._template_name = template.name
+                self._template_body = template.body
+                self._template_version = template.version
         # Policy: load from path if given, else use the passed object
         self.policy = None
         if policy is not None:
@@ -170,6 +200,21 @@ class Pipeline:
     def run(self, doc: Document) -> PipelineResult:
         timings: list[StageTiming] = []
 
+        # Resolve template body if a name was provided (not a Template obj).
+        # The body is read at run() time, not at construction, so the
+        # template registry can hot-reload changes between calls.
+        template_name = self._template_name
+        template_version = self._template_version
+        template_body = self._template_body
+        if template_name and not template_body and self._template_registry is not None:
+            try:
+                t = self._template_registry.get(template_name)
+                template_body = t.body
+                template_version = t.version
+            except Exception:  # noqa: BLE001
+                log.warning("template %r not found in registry; running without it", template_name)
+                template_name = None
+
         # PARSE ------------------------------------------------------------
         t = time.perf_counter()
         parse_document(doc, parser=self._resolve_parser(doc))
@@ -186,7 +231,10 @@ class Pipeline:
         timings.append(StageTiming("route", time.perf_counter() - t, {"chosen": mode.value}))
 
         t = time.perf_counter()
-        extract(doc, self.schema, self.backend, mode=mode)
+        extract(doc, self.schema, self.backend, mode=mode,
+                template_body=template_body,
+                template_name=template_name,
+                template_version=template_version)
         timings.append(StageTiming("extract", time.perf_counter() - t, {"mode": mode.value}))
 
         # ASSESS -----------------------------------------------------------
@@ -210,7 +258,25 @@ class Pipeline:
             classification=doc.classification,
             confidence=doc.confidence,
             validation_passed=bool((doc.validation or {}).get("passed", False)),
+            template_name=template_name,
+            template_version=template_version,
         )
+
+    def set_template_registry(self, registry: Any) -> None:
+        """Attach a TemplateRegistry for resolving string template names.
+
+        Usage::
+
+            from idp.templates import TemplateRegistry
+            registry = TemplateRegistry.load("./templates")
+            pipeline = Pipeline(backend="mock", template="invoice")
+            pipeline.set_template_registry(registry)
+            result = pipeline.run(doc)
+
+        The registry is consulted at run() time, so calls benefit from
+        hot-reload if ``watch=True`` was passed when loading.
+        """
+        self._template_registry = registry
 
 
 def run_file(

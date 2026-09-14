@@ -5,6 +5,60 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.3] — 2026-09-14 — Templates wire to LLM, structured error envelope, README translations
+
+### Added
+
+* **Template body now reaches the LLM** — `Pipeline(template=...)`
+  threads the template's Markdown body into every extraction call's
+  user message. Field descriptions, worked examples, and
+  common-mistakes notes from your `templates/*.md` files are prepended
+  to the prompt before the JSON Schema. The body is capped at ~2000
+  tokens to protect the 16k-context Nanonets-OCR2 budget, and is
+  included in **every** chunk call (not just the first), so multi-chunk
+  documents keep full template context throughout.
+* **`Pipeline(template="name")` + `set_template_registry(registry)`**
+  — resolve the template by name at run() time. Hot-reload works
+  transparently when the registry was loaded with `watch=True`. Missing
+  template name → logs a warning and proceeds without one.
+* **Template provenance on `Document` and `PipelineResult`** — the
+  matched template's name and version are recorded on
+  `Document.template_name` / `Document.template_version` and surfaced
+  in `PipelineResult` + `to_dict()` for audit. Answers "which template
+  version produced this row?" without re-running.
+* **Structured error envelope** — every `IDPError` subtype now carries
+  a stable machine-readable `code` (`IDP-RATE-001`, `IDP-PARSE-001`,
+  `IDP-SCHEMA-001`, `IDP-BACKEND-001`, `IDP-STORE-001`,
+  `IDP-CONF-001`, `IDP-TMPL-001`, `IDP-TMPL-404`) and an
+  `http_status`. The API's per-subtype exception handlers emit a
+  uniform JSON shape: `{"error": {"code", "message", "type",
+  "request_id", "details?"}}`. `RateLimitedError` adds a
+  `Retry-After: 60` header.
+* **`X-Request-ID` middleware** — every request gets a UUID (or
+  echoes the caller's header). Surfaces in the response header AND
+  every error envelope so client/server logs can be correlated.
+* **API endpoints for templates**:
+  * `GET /templates` — list summary (name, schema, version, patterns)
+  * `GET /templates/{name}` — full template including body
+  * `POST /extract` is now template-aware: when `schema_name` is
+    omitted, the server picks a template by filename + MIME and uses
+    its body as LLM context. The matched template is returned as
+    `template_used` in the response.
+* **Configuration** — `IDP_TEMPLATE_DIR` (default `./templates`),
+  `IDP_TEMPLATE_RELOAD` (default `false`; dev mode only).
+* **README translations** — Traditional Chinese (`README.zh-TW.md`)
+  and Simplified Chinese (`README.zh-CN.md`) at full feature parity
+  with the English version. Language switcher at the top of each
+  README.
+
+### Tests
+
+* 12 new tests in `tests/test_template_to_llm.py` cover: template
+  body reaching the LLM, template body in every chunk, hot-reload
+  between run() calls, provenance on `Document` and `PipelineResult`,
+  Pipeline API (`template=Template`, `template="name"` with
+  registry), token cap on huge bodies, missing-template fallback.
+
 ## [0.3.2] — 2026-09-10 — Reliability, performance, observability, schema discovery
 
 ### Added
