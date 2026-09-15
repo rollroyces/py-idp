@@ -30,25 +30,17 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Set up Chrome (system)
-        # GitHub Actions' Ubuntu runners have AppArmor that blocks
-        # unprivileged user namespaces, which breaks Chromium's
-        # default sandbox. Using the official Chrome (not bundled
-        # puppeteer chromium) with --no-sandbox works around this.
-        # See https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
-
-      - name: Install mermaid-cli
+      - name: Install mermaid-cli (with bundled chromium)
         # mmdc is the same engine GitHub uses to render diagrams.
-        # We install it via npm but point it at the system Chrome
-        # via PUPPETEER_EXECUTABLE_PATH below.
+        # The puppeteer-bundled chromium handles the AppArmor/sandbox
+        # issue on its own when we pass --no-sandbox through
+        # puppeteerConfig.args.
         run: |
           npm init -y >/dev/null
-          npm install --no-save @mermaid-js/mermaid-cli
-          echo "MMDC installed: $(./node_modules/.bin/mmdc --version)"
-          echo "Chrome path: $PUPPETEER_CHROME_PATH or $(which google-chrome)"
+          npm install --no-save @mermaid-js/mermaid-cli puppeteer
+          # Sanity: bundled chromium downloaded?
+          find node_modules/puppeteer -name "chrome" -type f 2>/dev/null | head -3
+          echo "MMDC: $(./node_modules/.bin/mmdc --version)"
 
       - name: Extract and validate every Mermaid block
         run: |
@@ -92,28 +84,14 @@ jobs:
             exit 1
           fi
 
-          # Detect the Chrome binary. browser-actions/setup-chrome
-          # installs Chrome on PATH as either google-chrome-stable,
-          # google-chrome, or chromium-browser depending on the
-          # Ubuntu version. Pick the first one that exists.
-          if command -v google-chrome-stable >/dev/null 2>&1; then
-            CHROME_BIN=$(command -v google-chrome-stable)
-          elif command -v google-chrome >/dev/null 2>&1; then
-            CHROME_BIN=$(command -v google-chrome)
-          elif command -v chromium-browser >/dev/null 2>&1; then
-            CHROME_BIN=$(command -v chromium-browser)
-          else
-            # Fallback to the env var set by the action
-            CHROME_BIN="${PUPPETEER_CHROME_PATH:-/usr/bin/google-chrome}"
-          fi
-          echo "Using Chrome at: $CHROME_BIN"
-
-          cat > /tmp/mmdc-config.json <<CFG
+          # mmdc needs a puppeteerConfig to disable the sandbox
+          # (AppArmor on GH Actions runners blocks the default
+          # chromium sandbox).
+          cat > /tmp/mmdc-config.json <<'CFG'
           {
             "args": ["--no-sandbox"],
             "puppeteerConfig": {
-              "executablePath": "$CHROME_BIN",
-              "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+              "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
             }
           }
           CFG
