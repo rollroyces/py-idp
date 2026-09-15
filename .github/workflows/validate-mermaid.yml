@@ -92,14 +92,27 @@ jobs:
             exit 1
           fi
 
-          # mmdc needs a puppeteerConfig. We use --no-sandbox so it
-          # works in the GitHub Actions container. The system Chrome
-          # from browser-actions/setup-chrome is at PUPPETEER_CHROME_PATH.
+          # Detect the Chrome binary. browser-actions/setup-chrome
+          # installs Chrome on PATH as either google-chrome-stable,
+          # google-chrome, or chromium-browser depending on the
+          # Ubuntu version. Pick the first one that exists.
+          if command -v google-chrome-stable >/dev/null 2>&1; then
+            CHROME_BIN=$(command -v google-chrome-stable)
+          elif command -v google-chrome >/dev/null 2>&1; then
+            CHROME_BIN=$(command -v google-chrome)
+          elif command -v chromium-browser >/dev/null 2>&1; then
+            CHROME_BIN=$(command -v chromium-browser)
+          else
+            # Fallback to the env var set by the action
+            CHROME_BIN="${PUPPETEER_CHROME_PATH:-/usr/bin/google-chrome}"
+          fi
+          echo "Using Chrome at: $CHROME_BIN"
+
           cat > /tmp/mmdc-config.json <<CFG
           {
             "args": ["--no-sandbox"],
             "puppeteerConfig": {
-              "executablePath": "\${PUPPETEER_CHROME_PATH}",
+              "executablePath": "$CHROME_BIN",
               "args": ["--no-sandbox", "--disable-setuid-sandbox"]
             }
           }
@@ -108,7 +121,6 @@ jobs:
           # Validate each block. We render to SVG (mmdc's default
           # output) to force a real parse. If parsing fails, mmdc
           # exits non-zero with a parse-error message.
-          export PUPPETEER_EXECUTABLE_PATH="\$PUPPETEER_CHROME_PATH"
           failed=0
           for f in /tmp/mmdc/d*.mmd; do
             name=$(basename "$f" .mmd)
