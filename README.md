@@ -22,6 +22,32 @@
 
 ---
 
+## Contents
+
+- [Install](#install)
+- [30-second tour](#30-second-tour)
+- [The pipeline](#the-pipeline)
+- [LLM backends](#llm-backends)
+  - [International (5 providers)](#international-5-providers-any-openai-compat-endpoint)
+  - [China (8 providers)](#china-8-providers--all-speak-the-openai-chat-completions-protocol)
+  - [Self-hosted (Nanonets-OCR2-3B)](#self-hosted-nanonets-ocr2-3b-on-apple-silicon--cuda)
+  - [Auto-chunking](#auto-chunking-for-oversized-documents)
+- [CLI](#cli)
+- [Bring your own schema](#bring-your-own-schema)
+- [Auto-schema discovery](#auto-schema-discovery)
+- [Templates per PDF type](#templates-per-pdf-type-llm-context-via-markdown)
+- [Chunking for oversized documents](#chunking-for-oversized-documents)
+- [Add business rules](#add-business-rules)
+- [Eval harness](#eval-harness)
+- [Reliability: retries, cache, checkpoint](#reliability-retries-cache-checkpoint)
+- [Production scaffolding](#production-scaffolding-built-in-optional)
+- [Learning from HITL corrections (RL)](#learning-from-hitl-corrections-rl)
+- [Development](#development)
+- [Security](#security)
+- [License](#license)
+
+---
+
 ## Install
 
 ```bash
@@ -86,19 +112,59 @@ print(result.validation)    # dict — schema + business-rule outcomes
 
 The framework is honest about what small models get wrong: arithmetic on tiny models (`subtotal`/`tax_amount`) is flagged with conf 0.10 and routed to HITL review, not silently passed.
 
+> **Why py-idp vs. a hand-rolled LLM script?**
+>
+> | | hand-rolled | py-idp |
+> |---|---|---|
+> | PDF parsing + table extraction | your problem | Docling, pdfplumber, plain — pick one |
+> | Multi-page LLM calls | write a chunker | built-in, with per-chunk failure handling |
+> | Confidence scoring | your problem | heuristic + optional LLM self-rate |
+> | Schema validation | your problem | Pydantic-typed, errors surfaced in `doc.errors` |
+> | HITL review | your problem | Streamlit app, persists corrections |
+> | Reliability | your problem | retry, cache, checkpoint built-in |
+> | Schema discovery | your problem | `discover_schema()` from a hint + a sample doc |
+> | Production eval | your problem | `idp eval` with field F1 + schema-valid rate |
+> | RL on corrections | your problem | `idp rl-update` — deterministic, inspectable |
+> | 12+ LLM backends | your problem | one `Pipeline(backend="...")` line |
+> | Dual license (AGPL + commercial) | your problem | revenue path without losing the open-source core |
+
 ---
 
 ## The pipeline
 
-```
-INGEST  →  PARSE  →  CLASSIFY  →  ROUTE  →  EXTRACT  →  ASSESS  →  VALIDATE  →  HITL
-                                                                         (Streamlit)
+```mermaid
+flowchart LR
+    A[INGEST<br/>file path / URL / bytes] --> B[PARSE<br/>Docling · pdfplumber · plain]
+    B --> C[CLASSIFY<br/>rule-first, LLM fallback]
+    C --> D{ROUTE<br/>multimodal or<br/>OCR+LLM?}
+    D -->|multimodal| E1[EXTRACT<br/>images → VLM]
+    D -->|OCR+LLM| E2[EXTRACT<br/>text → LLM]
+    E1 --> F[ASSESS<br/>per-field confidence]
+    E2 --> F
+    F --> G[VALIDATE<br/>Pydantic + business rules]
+    G --> H{any low<br/>confidence?}
+    H -->|yes| I[HITL<br/>Streamlit review]
+    H -->|no| J[(PipelineResult)]
+    I --> K[save correction<br/>+ update policy]
+    K --> J
+
+    style A fill:#1f6feb,stroke:#1f6feb,color:#fff
+    style B fill:#2da44e,stroke:#2da44e,color:#fff
+    style C fill:#2da44e,stroke:#2da44e,color:#fff
+    style D fill:#bf8700,stroke:#bf8700,color:#fff
+    style E1 fill:#8250df,stroke:#8250df,color:#fff
+    style E2 fill:#8250df,stroke:#8250df,color:#fff
+    style F fill:#cf222e,stroke:#cf222e,color:#fff
+    style G fill:#cf222e,stroke:#cf222e,color:#fff
+    style I fill:#6e7781,stroke:#6e7781,color:#fff
+    style J fill:#0a3069,stroke:#0a3069,color:#fff
 ```
 
 Each stage is a pure function over a `Document`. They run independently, are unit-testable in isolation, and any one can be swapped.
 
 | stage | module | default | what it does |
 |---|---|---|---|
+| **INGEST** | `idp.core.document` | `Document.from_path` | Bring bytes into a `Document` (path, URL, or in-memory) |
 | **parse** | `idp.parse` | Docling (PDF) · pdfplumber (fallback) · plain text | Extracts text + tables + page images |
 | **classify** | `idp.classify` | rule-first, LLM fallback | Detects doc type: invoice, contract, bank_statement, … |
 | **route** | `idp.parse.router` | auto | Chooses multimodal VLM vs OCR+LLM based on doc features |
@@ -107,6 +173,8 @@ Each stage is a pure function over a `Document`. They run independently, are uni
 | **validate** | `idp.validate` | Pydantic + user predicates | Schema check + business rules |
 | **HITL** | `idp.hitl` | Streamlit UI | Review low-confidence fields, save corrections |
 | **pipeline** | `idp.pipeline.pipeline` | orchestrator | Composes the above, returns `PipelineResult` |
+
+> **Legend** — blue: entry, green: parser/structure, yellow: decision, purple: extraction, red: confidence/validation, gray: human-in-the-loop, dark blue: result
 
 ---
 
@@ -300,6 +368,22 @@ but no Pydantic class yet. `discover_schema()` asks the multimodal LLM
 (NanonetsVLBackend by default) to propose a JSON Schema, then compiles
 it to a Pydantic class you can pass straight into `Pipeline(schema=...)`.
 
+```mermaid
+flowchart LR
+    A[scan.pdf +<br/>hint text] --> B[discover_schema]
+    B --> C[Nanonets VLM<br/>multimodal LLM]
+    C --> D[JSON Schema<br/>proposal]
+    D --> E[parse +<br/>validate]
+    E -->|invalid| F[retry with<br/>error feedback]
+    F --> C
+    E -->|valid| G[compile to<br/>Pydantic class]
+    G --> H[hint grounding<br/>check]
+    H -->|score < 0.5| I[log warning:<br/>LLM ignored hint]
+    H --> J[Pipeline.run<br/>schema=Schema]
+    I --> J
+    J --> K[(extraction)]
+```
+
 ```python
 import idp
 
@@ -451,6 +535,25 @@ multi-page scan may exceed that. `py-idp` **auto-detects oversized
 input, chunks it, runs the LLM once per chunk, and merges the
 per-chunk extractions** — all without glue code.
 
+```mermaid
+flowchart TD
+    A[Document] --> B{multimodal<br/>backend?}
+    B -->|yes| C[count pages]
+    B -->|no| D[count tokens<br/>via tiktoken]
+    C --> E{pages > 4?}
+    D --> F{tokens > 4000?}
+    E -->|yes| G[PageChunker<br/>4 pages, 1 overlap]
+    E -->|no| H[single call]
+    F -->|yes| I[TokenChunker<br/>4000 tok, 200 overlap]
+    F -->|no| H
+    G --> J[LLM per chunk]
+    I --> J
+    J --> K[merge_extractions]
+    K --> L[Pydantic validation<br/>on the merged result]
+    L --> M[(PipelineResult)]
+    H --> M
+```
+
 | chunker | when used | default config |
 |---|---|---|
 | `PageChunker` | multimodal backends (NanonetsVLBackend, GPT-4o, etc.) | 4 pages per chunk, 1-page overlap |
@@ -543,7 +646,21 @@ This runs the in-tree MockBackend against all 5 receipts and prints per-field pr
 
 ## Reliability: retries, cache, checkpoint
 
-Three opt-in features for production workloads.
+Three opt-in features for production workloads. They compose cleanly — `retry` wraps the backend, `cache` wraps the retry, and `checkpoint` tracks per-document completion independently.
+
+```mermaid
+flowchart LR
+    User[Pipeline.run] --> Check{cached?}
+    Check -->|yes| CacheHit[return cached<br/>extraction]
+    Check -->|no| Retry{retryable<br/>error?}
+    Retry -->|yes| Wait[wait 1s→2s→4s→8s<br/>±20% jitter]
+    Wait --> Call[backend.complete]
+    Retry -->|no| Fail[raise IDPError]
+    Call --> Retry
+    Call -->|success| Store[cache.put<br/>+ checkpoint.record]
+    Store --> Done[(PipelineResult)]
+    CacheHit --> Done
+```
 
 ### RetryingBackend — automatic retries with backoff
 
@@ -640,6 +757,35 @@ Multi-tenant isolation, SSO/SAML/RBAC, audit-grade storage — needed for SaaS b
 ## Learning from HITL corrections (RL)
 
 Every human review in `idp.storage` becomes a training signal. The framework ships an **offline batch policy update** that turns "fields humans keep correcting" into higher-confidence-floor + lower-confidence-penalty for those fields — so they reliably surface to HITL review in the next run.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Pipeline
+    participant LLM
+    participant HITL as HITL UI
+    participant Storage
+    participant Policy as policy.json
+
+    User->>Pipeline: run(doc)
+    Pipeline->>LLM: extract(doc, schema)
+    LLM-->>Pipeline: extraction + confidence
+    Pipeline->>Pipeline: assess(per-field)
+    Pipeline->>HITL: low-confidence fields
+    HITL->>User: show field for review
+    User->>HITL: edit (or accept)
+    HITL->>Storage: mark_reviewed(result_id, edited, reviewer)
+    Note over Storage: append-only,<br/>schema: reviews +<br/>review_edits
+
+    User->>Policy: idp rl-update --storage ... --output policy.json
+    Policy->>Storage: aggregate rewards
+    Policy->>Policy: apply min_reviews=10 guard
+    Policy-->>User: new policy with field_floors
+
+    User->>Pipeline: run(doc, policy_path=policy.json)
+    Pipeline->>Pipeline: assess adjusts confidence<br/>by field_penalties
+    Note over Pipeline: next run routes<br/>"vendor_name" to HITL<br/>more reliably
+```
 
 ```bash
 # Offline batch: derive rewards from accumulated reviews, write policy.json

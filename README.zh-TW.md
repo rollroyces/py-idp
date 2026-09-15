@@ -22,6 +22,28 @@
 
 ---
 
+## 目錄
+
+- [安裝](#安裝)
+- [30 秒快速上手](#30-秒快速上手)
+- [管線](#管線)
+- [LLM 後端](#llm-後端)
+- [命令列工具](#命令列工具)
+- [自訂 Schema](#自訂-schema)
+- [Schema 自動探索](#schema-自動探索)
+- [超大文件分塊](#超大文件分塊)
+- [新增業務規則](#新增業務規則)
+- [範例展示](#範例展示)
+- [評測工具集](#評測工具集)
+- [可靠性：重試、快取、檢查點](#可靠性重試快取檢查點)
+- [生產級鷹架](#生產級鷹架內建按需啟用)
+- [從 HITL 修正中學習（RL）](#從-hitl-修正中學習rl)
+- [開發](#開發)
+- [安全](#安全)
+- [授權](#授權)
+
+---
+
 ## 安裝
 
 ```bash
@@ -90,15 +112,28 @@ print(result.validation)    # dict —— Schema 與業務規則驗證結果
 
 ## 管線
 
-```text
-INGEST  →  PARSE  →  CLASSIFY  →  ROUTE  →  EXTRACT  →  ASSESS  →  VALIDATE  →  HITL
-                                                                         (Streamlit)
+```mermaid
+flowchart LR
+    A[INGEST<br/>檔案路徑 / URL / 位元組] --> B[PARSE<br/>Docling · pdfplumber · 純文字]
+    B --> C[CLASSIFY<br/>規則優先，LLM 備援]
+    C --> D{ROUTE<br/>多模態還是<br/>OCR+LLM？}
+    D -->|多模態| E1[EXTRACT<br/>影像 → VLM]
+    D -->|OCR+LLM| E2[EXTRACT<br/>文字 → LLM]
+    E1 --> F[ASSESS<br/>逐欄位信心度]
+    E2 --> F
+    F --> G[VALIDATE<br/>Pydantic + 業務規則]
+    G --> H{有低<br/>信心度？}
+    H -->|是| I[HITL<br/>Streamlit 複核]
+    H -->|否| J[(PipelineResult)]
+    I --> K[儲存修正<br/>+ 更新策略]
+    K --> J
 ```
 
-每個階段都是 `Document` 上的純函數。它們獨立執行、可單獨進行單元測試、任何一個都可以替換。
+每個階段都是 `Document` 上的純函式。它們獨立執行、可單獨進行單元測試、任何一個都可以替換。
 
 | 階段 | 模組 | 預設實作 | 功能 |
 |---|---|---|---|
+| **INGEST** | `idp.core.document` | `Document.from_path` | 將位元組載入 `Document`（路徑、URL 或記憶體） |
 | **parse** | `idp.parse` | Docling（PDF）· pdfplumber（備援）· 純文字 | 抽取文字 + 表格 + 頁面影像 |
 | **classify** | `idp.classify` | 規則優先，LLM 備援 | 識別文件類型：invoice、contract、bank_statement…… |
 | **route** | `idp.parse.router` | 自動 | 根據文件特徵選擇多模態 VLM 或 OCR+LLM |
