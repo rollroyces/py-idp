@@ -205,7 +205,6 @@ class TestSchemaBootstrap:
 
         SqlStorage(f"sqlite:///{tmp_path / 'fresh.db'}")
         # After construction, schema_version must exist
-        import sqlite3
         conn = sqlite3.connect(str(tmp_path / "fresh.db"))
         cur = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"

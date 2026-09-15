@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, master, develop]
 
+# Default to least-privilege. Per-job overrides set what each job needs.
+permissions:
+  contents: read
+
 jobs:
   unit:
     runs-on: ubuntu-latest
