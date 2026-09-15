@@ -30,14 +30,25 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Set up Chrome (system)
+        # GitHub Actions' Ubuntu runners have AppArmor that blocks
+        # unprivileged user namespaces, which breaks Chromium's
+        # default sandbox. Using the official Chrome (not bundled
+        # puppeteer chromium) with --no-sandbox works around this.
+        # See https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+
       - name: Install mermaid-cli
         # mmdc is the same engine GitHub uses to render diagrams.
-        # It needs a chromium runtime; we install chromium deps via
-        # --no-sandbox so it works in CI containers.
+        # We install it via npm but point it at the system Chrome
+        # via PUPPETEER_EXECUTABLE_PATH below.
         run: |
           npm init -y >/dev/null
           npm install --no-save @mermaid-js/mermaid-cli
           echo "MMDC installed: $(./node_modules/.bin/mmdc --version)"
+          echo "Chrome path: $PUPPETEER_CHROME_PATH or $(which google-chrome)"
 
       - name: Extract and validate every Mermaid block
         run: |
@@ -82,11 +93,13 @@ jobs:
           fi
 
           # mmdc needs a puppeteerConfig. We use --no-sandbox so it
-          # works in the GitHub Actions container.
-          cat > /tmp/mmdc-config.json <<'CFG'
+          # works in the GitHub Actions container. The system Chrome
+          # from browser-actions/setup-chrome is at PUPPETEER_CHROME_PATH.
+          cat > /tmp/mmdc-config.json <<CFG
           {
             "args": ["--no-sandbox"],
             "puppeteerConfig": {
+              "executablePath": "\${PUPPETEER_CHROME_PATH}",
               "args": ["--no-sandbox", "--disable-setuid-sandbox"]
             }
           }
@@ -95,6 +108,7 @@ jobs:
           # Validate each block. We render to SVG (mmdc's default
           # output) to force a real parse. If parsing fails, mmdc
           # exits non-zero with a parse-error message.
+          export PUPPETEER_EXECUTABLE_PATH="\$PUPPETEER_CHROME_PATH"
           failed=0
           for f in /tmp/mmdc/d*.mmd; do
             name=$(basename "$f" .mmd)
