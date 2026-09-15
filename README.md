@@ -700,6 +700,23 @@ and [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tes
 
 ## Add business rules
 
+```mermaid
+flowchart LR
+    Ext[extract] --> Schema[schema validation<br/>Pydantic types]
+    Schema --> Rules[business_rules<br/>list of predicates]
+    Rules --> R1{required_<br/>fields_rule}
+    Rules --> R2{numeric_<br/>range_rule}
+    Rules --> R3[user predicate<br/>e.g. cross-field check]
+    R1 -->|fail| V[validation =<br/>{passed: false, errors}]
+    R2 -->|fail| V
+    R3 -->|raise| V
+    R1 -->|pass| R2
+    R2 -->|pass| R3
+    R3 -->|pass| V2[validation =<br/>{passed: true}]
+    V --> Conf[confidence<br/>stays as-is]
+    V2 --> Conf
+```
+
 ```python
 from idp.validate import required_fields_rule, numeric_range_rule
 
@@ -735,6 +752,19 @@ The same extraction viewed through the Streamlit HITL review UI:
 ## Eval harness
 
 Honest extraction claims need labeled data and side-by-side backend comparison. `py-idp` ships both.
+
+```mermaid
+flowchart LR
+    A[datasets/<br/>cases.jsonl + docs/] -->|load| B[Eval Runner]
+    B -->|for each strategy| C[Pipeline.run<br/>+ extract + assess]
+    C --> D{schema<br/>valid?}
+    D -->|yes| E[field_match<br/>vs gold]
+    D -->|no| F[mark invalid]
+    E --> G[aggregate<br/>P/R/F1]
+    F --> G
+    G --> H[results.json<br/>per-strategy rows]
+    H -->|ci or report| I[publish or<br/>block merge]
+```
 
 ```bash
 idp eval --dataset src/idp/eval/datasets/invoices \
