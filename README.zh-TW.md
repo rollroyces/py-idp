@@ -740,7 +740,7 @@ python -m examples.batch        # process_batch() 批次助手，用於 Databric
 python -m examples.discover_schema_sample  # AI 驅動的 Schema 探索（6 個情境，產生真實 PDF）
 ```
 
-`import idp; idp.__version__` → `0.3.2`.
+`import idp; idp.__version__` → `0.3.4`.
 
 ---
 
