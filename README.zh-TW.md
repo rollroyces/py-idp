@@ -462,6 +462,23 @@ print(result.document.extraction.get("_chunk_count"))  # 約 25
 
 ## 新增業務規則
 
+```mermaid
+flowchart LR
+    Ext[extract] --> Schema[Schema 驗證<br/>Pydantic 型別]
+    Schema --> Rules[business_rules<br/>述詞清單]
+    Rules --> R1{required_<br/>fields_rule}
+    Rules --> R2{numeric_<br/>range_rule}
+    Rules --> R3[使用者自訂述詞<br/>例如跨欄位驗證]
+    R1 -->|失敗| V[validation =<br/>{passed: false, errors}]
+    R2 -->|失敗| V
+    R3 -->|拋錯| V
+    R1 -->|通過| R2
+    R2 -->|通過| R3
+    R3 -->|通過| V2[validation =<br/>{passed: true}]
+    V --> Conf[confidence<br/>保持原值]
+    V2 --> Conf
+```
+
 ```python
 from idp.validate import required_fields_rule, numeric_range_rule
 
@@ -496,6 +513,19 @@ pipe = Pipeline(
 ## 評測套件
 
 誠實的萃取結果需要標註資料和多後端橫向比較。`py-idp` 內建兩者。
+
+```mermaid
+flowchart LR
+    A[資料集<br/>cases.jsonl + docs/] -->|load| B[評測執行器]
+    B -->|對每個後端| C[Pipeline.run<br/>+ extract + assess]
+    C --> D{Schema<br/>合法？}
+    D -->|是| E[field_match<br/>對比 gold]
+    D -->|否| F[標記非法]
+    E --> G[聚合<br/>P/R/F1]
+    F --> G
+    G --> H[results.json<br/>每後端一行]
+    H -->|CI 或報告| I[發布或<br/>阻止合併]
+```
 
 ```bash
 idp eval --dataset src/idp/eval/datasets/invoices \
