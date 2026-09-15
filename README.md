@@ -1054,7 +1054,7 @@ python -m examples.batch        # process_batch() helper for Databricks-style ba
 python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
-`import idp; idp.__version__` → `0.3.2`.
+`import idp; idp.__version__` → `0.3.4`.
 
 ---
 
