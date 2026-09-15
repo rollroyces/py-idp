@@ -143,9 +143,67 @@ flowchart LR
 | **HITL** | `idp.hitl` | Streamlit UI | 複核低信心度欄位，儲存修正 |
 | **pipeline** | `idp.pipeline.pipeline` | 編排器 | 組合上述階段，回傳 `PipelineResult` |
 
+### 一圖看架構
+
+```mermaid
+flowchart TB
+    subgraph CLI["idp CLI (idp.pipeline.cli)"]
+        run[run / schemas /<br/>providers / eval /<br/>rl-update / serve]
+    end
+    subgraph API["FastAPI 服務 (idp.api)"]
+        rest["/extract / /templates<br/>/healthz / /metrics"]
+    end
+    subgraph Core["idp.core + idp.parse + idp.chunker"]
+        doc[Document /<br/>Page / Block]
+    end
+    subgraph LLM["idp.llm"]
+        backends[Backend 通訊協定<br/>+ 可靠性包裝]
+    end
+    subgraph Eval["idp.eval + idp.rl"]
+        harness[評測執行器 /<br/>策略更新 /<br/>校正]
+    end
+    subgraph HITL["idp.hitl"]
+        streamlit[Streamlit<br/>複核 UI]
+    end
+    subgraph Storage["idp.storage"]
+        json[JsonFileStorage /<br/>SqlStorage]
+    end
+    subgraph Templates["idp.templates"]
+        reg["*.md →<br/>TemplateRegistry"]
+    end
+
+    CLI --> Core
+    API --> Core
+    Core --> LLM
+    Core --> Templates
+    LLM --> Core
+    Core --> Eval
+    Core --> HITL
+    HITL --> Storage
+    Eval --> Storage
+    Storage --> Core
+```
+
+每個子套件都可以獨立 `import idp.<name>` 使用 —— 例如 `idp.core` 不依賴其他套件，`idp.llm` 只依賴 `idp.errors`。
+
 ---
 
 ## LLM 後端
+
+`py-idp` 使用統一的 `Backend` 通訊協定，每個 provider 都實作它。Pipeline 不需要關心 provider 的具體實作 —— 永遠透過 `backend.complete(CompletionRequest)` 呼叫。
+
+```mermaid
+flowchart LR
+    subgraph pyidp[py-idp Pipeline]
+        EX[extract / assess /<br/>validate / rl-eval]
+    end
+    EX --> Backend[Backend<br/>通訊協定]
+    Backend --> Wrap{RetryingBackend<br/>+ ExtractionCache}
+    Wrap --> Call[complete<br/>request]
+    Call --> P[openai / anthropic /<br/>ollama / china:qwen /<br/>compat: 任意 OpenAI 風格]
+    Call --> N[Nanonets-OCR2-3B<br/>自架 VLM]
+    Call --> M[mock / mock-random /<br/>mock-omits]
+```
 
 ### 國際（5 個 provider，支援任何 OpenAI 相容介面）
 
