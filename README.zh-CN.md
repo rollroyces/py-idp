@@ -469,12 +469,12 @@ flowchart LR
     Rules --> R1{required_<br/>fields_rule}
     Rules --> R2{numeric_<br/>range_rule}
     Rules --> R3[用户自定义谓词<br/>例如跨字段校验]
-    R1 -->|失败| V[validation =<br/>{passed: false, errors}]
+    R1 -->|失败| V["validation =<br/>{passed: false, errors}"]
     R2 -->|失败| V
     R3 -->|抛错| V
     R1 -->|通过| R2
     R2 -->|通过| R3
-    R3 -->|通过| V2[validation =<br/>{passed: true}]
+    R3 -->|通过| V2["validation =<br/>{passed: true}"]
     V --> Conf[confidence<br/>保持原值]
     V2 --> Conf
 ```

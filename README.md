@@ -707,12 +707,12 @@ flowchart LR
     Rules --> R1{required_<br/>fields_rule}
     Rules --> R2{numeric_<br/>range_rule}
     Rules --> R3[user predicate<br/>e.g. cross-field check]
-    R1 -->|fail| V[validation =<br/>{passed: false, errors}]
+    R1 -->|fail| V["validation =<br/>{passed: false, errors}"]
     R2 -->|fail| V
     R3 -->|raise| V
     R1 -->|pass| R2
     R2 -->|pass| R3
-    R3 -->|pass| V2[validation =<br/>{passed: true}]
+    R3 -->|pass| V2["validation =<br/>{passed: true}"]
     V --> Conf[confidence<br/>stays as-is]
     V2 --> Conf
 ```
