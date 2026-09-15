@@ -1,0 +1,124 @@
+name: validate-mermaid
+
+# Validate every Mermaid block in the 3 READMEs using the same engine
+# GitHub uses to render them. This catches the exact class of bug we
+# shipped in PR #15 (unquoted braces in node labels were mis-parsed as
+# diamond-shape openers, breaking the entire diagram).
+#
+# The script checks out, extracts every ```mermaid block from
+# README.md / README.zh-CN.md / README.zh-TW.md, and pipes each one
+# to @mermaid-js/mermaid-cli (mmdc). If any block fails to parse, mmdc
+# exits non-zero and the job fails.
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  mermaid:
+    name: Validate Mermaid blocks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mermaid-cli
+        # mmdc is the same engine GitHub uses to render diagrams.
+        # It needs a chromium runtime; we install chromium deps via
+        # --no-sandbox so it works in CI containers.
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save @mermaid-js/mermaid-cli
+          echo "MMDC installed: $(./node_modules/.bin/mmdc --version)"
+
+      - name: Extract and validate every Mermaid block
+        run: |
+          set -euo pipefail
+          # Extract every ```mermaid block from each README, write to
+          # /tmp/mmdc/, then validate each.
+          mkdir -p /tmp/mmdc /tmp/mmdc/out
+          rm -f /tmp/mmdc/d*.mmd /tmp/mmdc/d*.err /tmp/mmdc/out/*.svg
+
+          # Concatenate every block from every README into one file,
+          # separated by blank lines (so the splitter sees a new
+          # top-level keyword after each blank).
+          : > /tmp/mmdc/all.mmd
+          for f in README.md README.zh-CN.md README.zh-TW.md; do
+            [ -f "$f" ] || continue
+            awk '
+              /^```mermaid$/ { capturing = 1; next }
+              /^```$/        { if (capturing) { print; capturing = 0 } ; next }
+              capturing      { print }
+            ' "$f" >> /tmp/mmdc/all.mmd
+            # blank-line separator so the splitter treats the next
+            # diagram as a fresh file
+            echo "" >> /tmp/mmdc/all.mmd
+          done
+
+          # Split into one file per top-level diagram type. Each
+          # diagram starts with a "flowchart" / "sequenceDiagram" /
+          # "stateDiagram" / "classDiagram" / "graph" keyword.
+          awk '
+            BEGIN { idx = 0 }
+            /^(flowchart|sequenceDiagram|stateDiagram-v2|classDiagram|graph)/ { idx++ }
+            { print > sprintf("/tmp/mmdc/d%02d.mmd", idx) }
+          ' /tmp/mmdc/all.mmd
+
+          # Count diagrams
+          total=$(ls /tmp/mmdc/d*.mmd 2>/dev/null | wc -l | tr -d ' ')
+          echo "Found $total Mermaid blocks across 3 READMEs"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::No Mermaid blocks found; expected at least the pipeline diagram."
+            exit 1
+          fi
+
+          # mmdc needs a puppeteerConfig. We use --no-sandbox so it
+          # works in the GitHub Actions container.
+          cat > /tmp/mmdc-config.json <<'CFG'
+          {
+            "args": ["--no-sandbox"],
+            "puppeteerConfig": {
+              "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+            }
+          }
+          CFG
+
+          # Validate each block. We render to SVG (mmdc's default
+          # output) to force a real parse. If parsing fails, mmdc
+          # exits non-zero with a parse-error message.
+          failed=0
+          for f in /tmp/mmdc/d*.mmd; do
+            name=$(basename "$f" .mmd)
+            if ./node_modules/.bin/mmdc -i "$f" -o "/tmp/mmdc/out/${name}.svg" \
+                  -c /tmp/mmdc-config.json 2>/tmp/mmdc/${name}.err; then
+              echo "  ${name}: OK"
+            else
+              echo "  ${name}: FAILED"
+              cat /tmp/mmdc/${name}.err | head -20
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::One or more Mermaid blocks failed to parse. See above for details."
+            exit 1
+          fi
+          echo "All $total Mermaid blocks parse cleanly."
+
+      - name: Show first 3 rendered SVGs as artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mermaid-render-preview
+          path: /tmp/mmdc/out/*.svg
+          retention-days: 7
+          if-no-files-found: ignore
