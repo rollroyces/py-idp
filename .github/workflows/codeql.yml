@@ -30,8 +30,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # CodeQL Action v3 is deprecated and will be removed in December
+      # 2026. v4 has the same surface but adds Python 3.13 support,
+      # better incremental analysis, and a smaller image.
+      # https://github.blog/changelog/2025-10-28-upcoming-deprecation-of-codeql-action-v3/
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           # Use the default query packs (security + quality). The
@@ -39,6 +43,6 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"

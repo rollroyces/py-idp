@@ -176,9 +176,78 @@ Each stage is a pure function over a `Document`. They run independently, are uni
 
 > **Legend** — blue: entry, green: parser/structure, yellow: decision, purple: extraction, red: confidence/validation, gray: human-in-the-loop, dark blue: result
 
+### Architecture at a glance
+
+```mermaid
+flowchart TB
+    subgraph CLI["idp CLI (idp.pipeline.cli)"]
+        run[run / schemas /<br/>providers / eval /<br/>rl-update / serve]
+    end
+    subgraph API["FastAPI server (idp.api)"]
+        rest["/extract / /templates<br/>/healthz / /metrics"]
+    end
+    subgraph Core["idp.core + idp.parse + idp.chunker"]
+        doc[Document /<br/>Page / Block]
+    end
+    subgraph LLM["idp.llm"]
+        backends[Backend Protocol<br/>+ Reliability wrappers]
+    end
+    subgraph Eval["idp.eval + idp.rl"]
+        harness[eval runner /<br/>policy update /<br/>calibration]
+    end
+    subgraph HITL["idp.hitl"]
+        streamlit[Streamlit<br/>review UI]
+    end
+    subgraph Storage["idp.storage"]
+        json[JsonFileStorage /<br/>SqlStorage]
+    end
+    subgraph Templates["idp.templates"]
+        reg["*.md →<br/>TemplateRegistry"]
+    end
+
+    CLI --> Core
+    API --> Core
+    Core --> LLM
+    Core --> Templates
+    LLM --> Core
+    Core --> Eval
+    Core --> HITL
+    HITL --> Storage
+    Eval --> Storage
+    Storage --> Core
+
+    style CLI fill:#1f6feb,stroke:#1f6feb,color:#fff
+    style API fill:#1f6feb,stroke:#1f6feb,color:#fff
+    style Core fill:#8250df,stroke:#8250df,color:#fff
+    style LLM fill:#bf8700,stroke:#bf8700,color:#fff
+    style Eval fill:#2da44e,stroke:#2da44e,color:#fff
+    style HITL fill:#6e7781,stroke:#6e7781,color:#fff
+    style Storage fill:#cf222e,stroke:#cf222e,color:#fff
+    style Templates fill:#0a3069,stroke:#0a3069,color:#fff
+```
+
+The color coding matches the pipeline diagram above. Each box is a
+subpackage you can `import idp.<name>` to use independently — `idp.core`
+needs nothing from the rest, `idp.llm` only needs `idp.errors`, etc.
+
 ---
 
 ## LLM backends
+
+`py-idp` has a single `Backend` protocol and every provider implements it. The pipeline never sees provider-specific code — it always calls `backend.complete(CompletionRequest)`.
+
+```mermaid
+flowchart LR
+    subgraph pyidp[py-idp Pipeline]
+        EX[extract / assess /<br/>validate / rl-eval]
+    end
+    EX --> Backend[Backend<br/>Protocol]
+    Backend --> Wrap{RetryingBackend<br/>+ ExtractionCache}
+    Wrap --> Call[complete<br/>request]
+    Call --> P[openai / anthropic /<br/>ollama / china:qwen /<br/>compat: any OpenAI-style]
+    Call --> N[Nanonets-OCR2-3B<br/>self-hosted VLM]
+    Call --> M[mock / mock-random /<br/>mock-omits]
+```
 
 ### International (5 providers, any OpenAI-compat endpoint)
 
@@ -338,6 +407,38 @@ For copy-pasteable scripts that show each backend / pipeline pattern end-to-end,
 
 The built-in `Invoice`, `Contract`, `BankStatement` schemas are convenience references — pass any Pydantic model:
 
+```mermaid
+classDiagram
+    class Document {
+        +str source_path
+        +str raw_text
+        +list~Page~ pages
+        +dict extraction
+        +dict confidence
+        +str schema_name
+        +str template_name
+    }
+    class Page {
+        +int page_num
+        +str text
+        +list~str~ images_b64
+        +list~dict~ tables
+    }
+    class PipelineResult {
+        +Document document
+        +str schema_name
+        +str backend_name
+        +str mode
+        +list~StageTiming~ timings
+    }
+    class BaseModel {
+        <<interface>>
+    }
+    Document "1" --> "*" Page : contains
+    PipelineResult "1" --> "1" Document : wraps
+    Document ..> BaseModel : validated against
+```
+
 ```python
 from pydantic import BaseModel
 from idp import Document
@@ -472,6 +573,16 @@ on every extraction call** — field descriptions, worked examples,
 common-mistakes notes. JSON Schema alone can't express "subtotal and
 total_amount are NOT the same — subtract tax to get subtotal", but a
 template can.
+
+```mermaid
+flowchart LR
+    A[templates/<br/>invoice.md] -->|load at startup| B[TemplateRegistry]
+    B -->|filename/MIME match| C[Template]
+    C -->|body + name + version| D[Pipeline.run]
+    D -->|prepend to prompt| E[LLM call<br/>text + template body<br/>+ JSON Schema]
+    E -->|extraction| F[PipelineResult<br/>+ doc.template_name<br/>+ doc.template_version]
+    F -.audit.-> G[which template<br/>version produced<br/>this row?]
+```
 
 ```yaml
 # templates/invoice.md
@@ -816,6 +927,24 @@ idp rl-update --reviews reviews.jsonl --output policy.json
 | `invoice_number` | 0.75 | 0.75 (no override) | 0.0 |
 
 Online (per-review) update ships in v0.2 via `PolicyCache`; the offline batch is fully wired today.
+
+### Lifecycle of a single document
+
+```mermaid
+stateDiagram-v2
+    [*] --> Queued: Pipeline.run()
+    Queued --> Extracted: low confidence
+    Queued --> Accepted: high confidence
+    Extracted --> Queued: re-run with new policy
+    Extracted --> Reviewed: human edits field
+    Reviewed --> Accepted: human accepts
+    Reviewed --> Edited: human saves correction
+    Edited --> Queued: idp rl-update
+    Accepted --> [*]
+    Edited --> [*]: contributes to policy
+```
+
+The `Queued → Reviewed → Edited → policy` loop is what makes this "RL" — every human edit is a training signal that updates which fields get routed to review next time.
 
 ### Calibration eval — does the policy actually do what it claims?
 
