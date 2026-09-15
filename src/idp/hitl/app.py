@@ -59,6 +59,18 @@ class _StreamlitProxy:
 st: _StreamlitProxy = _StreamlitProxy()  # type: ignore[assignment]
 
 
+# Local imports — kept inside the module so the Streamlit proxy is
+# already wired. These are pure-Python (no Streamlit import), so they
+# are safe to import at module level.
+from idp.hitl.review import (  # noqa: E402  (after proxy setup)
+    coerce_field_value,
+    count_corrections,
+    format_result_label,
+    save_review,
+    sort_pending_newest_first,
+)
+
+
 # ----------------------------------------------------------------------
 # Bootstrap
 # ----------------------------------------------------------------------
@@ -132,9 +144,9 @@ def page_queue() -> None:
         st.info("No unreviewed results. Run `idp run` on a document to add some.")
         return
     # most recent first
-    pending = sorted(pending, key=lambda r: -r.created_at)
+    pending = sort_pending_newest_first(pending)
     # pickable list
-    labels = [f"{r.id}  —  {r.schema_name}  —  {r.source_path}" for r in pending]
+    labels = [format_result_label(r) for r in pending]
     chosen_label = st.selectbox("choose a result to review", labels)
     chosen = next(r for r in pending if r.id in chosen_label)
 
@@ -163,12 +175,10 @@ def page_queue() -> None:
                     key=f"{chosen.id}_{field_name}_raw",
                     height=160,
                 )
-                try:
-                    import json as _json
-                    edited[field_name] = _json.loads(new_v)
-                except Exception:  # noqa: BLE001
-                    edited[field_name] = new_v
-                    st.warning(f"{field_name}: JSON invalid; saved as raw")
+                parsed, warning = coerce_field_value(new_v, val)
+                if warning:
+                    st.warning(f"{field_name}: {warning}")
+                edited[field_name] = parsed
             else:
                 edited[field_name] = st.text_input(
                     f"{field_name}_val",
@@ -181,16 +191,7 @@ def page_queue() -> None:
     with col_save:
         if st.button("Save review", type="primary"):
             try:
-                # SqlStorage exposes submit_review; legacy storage
-                # falls back to mark_reviewed.
-                if hasattr(storage, "submit_review"):
-                    storage.submit_review(
-                        result_id=chosen.id,
-                        edited=edited,
-                        reviewer=reviewer,
-                    )
-                else:
-                    storage.mark_reviewed(chosen.id, edited, reviewer)
+                save_review(storage, result_id=chosen.id, edited=edited, reviewer=reviewer)
                 st.success(f"Saved review for {chosen.id}")
                 st.cache_resource.clear()
                 st.rerun()
@@ -218,11 +219,7 @@ def page_history() -> None:
             st.caption(f"source: {r.source_path}")
             if r.last_reviewed_at:
                 st.caption(f"last_reviewed_at: {r.last_reviewed_at}")
-            n_corrections = sum(
-                1
-                for k, v in (r.extraction or {}).items()
-                if (r.reviewed_extraction or {}).get(k) != v
-            )
+            n_corrections = count_corrections(r)
             st.metric("fields corrected", n_corrections)
 
 

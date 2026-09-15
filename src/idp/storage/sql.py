@@ -490,18 +490,32 @@ class SqlStorage:
 # Helpers
 # ---------------------------------------------------------------------------
 def _now(dialect: str) -> str:
-    """Current timestamp in the right format for the dialect."""
+    """Current timestamp in the right format for the dialect.
+
+    Returns a **naive** ISO 8601 string in UTC. We use
+    ``datetime.now(timezone.utc)`` and strip the tzinfo so the wire
+    format is unchanged from the previous (now-deprecated)
+    ``datetime.utcnow()`` behavior.
+
+    This is what gets written into `created_at`, `updated_at`, etc.
+    SQLite's ``datetime('now')`` returns a naive UTC string; the
+    Postgres code path uses ``CURRENT_TIMESTAMP`` which is also naive
+    in the rows we read. Keeping the wire format naive makes the two
+    dialects behave identically.
+    """
+    from datetime import datetime, timezone
+
     if dialect == "sqlite":
-        # use the same format SQLite will return from datetime('now')
-        import datetime as _dt
-        return _dt.datetime.utcnow().isoformat(timespec="seconds")
-    import datetime as _dt
-    return _dt.datetime.utcnow().isoformat()
+        # Match SQLite's `datetime('now')` precision: seconds, no
+        # sub-second fraction.
+        return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def _epoch_to_iso(epoch: float, dialect: str) -> str:
-    import datetime as _dt
-    return _dt.datetime.utcfromtimestamp(epoch).isoformat()
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(epoch, timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def _strip_postgres_only(sql_text: str) -> str:

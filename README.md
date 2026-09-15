@@ -1044,9 +1044,9 @@ cd py-idp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest -v                       # 604 tests, no API key needed
+pytest -v                       # 654 tests, no API key needed
 ruff check src tests examples   # lint
-mypy src/idp                    # type-check (clean across 59 files)
+mypy src/idp                    # type-check (clean across 61 files)
 
 python -m examples.invoice      # end-to-end demo (no API key needed)
 python -m examples.nanonets_ocr2  # NanonetsVLBackend end-to-end (needs IDP_ENABLE_NANONETS=1)
@@ -1054,7 +1054,7 @@ python -m examples.batch        # process_batch() helper for Databricks-style ba
 python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
-`import idp; idp.__version__` → `0.3.4`.
+`import idp; idp.__version__` → `0.3.5`.
 
 ---
 
@@ -1079,7 +1079,7 @@ Issues, PRs, and Discussions are welcome. The full guide — including
 how to add a new LLM backend or schema, commit-message conventions, and
 the release flow — lives in [`CONTRIBUTING.md`](https://github.com/rollroyces/py-idp/blob/main/CONTRIBUTING.md). Bug
 reports do best with a minimal reproduction script and your `py-idp`
-version. CI runs ruff + mypy + 604 tests across Python 3.10 / 3.11 /
+version. CI runs ruff + mypy + 654 tests across Python 3.10 / 3.11 /
 3.12 on every PR.
 
 ---

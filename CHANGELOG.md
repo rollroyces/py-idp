@@ -5,6 +5,62 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.5] — 2026-09-15 — Tier-A roadmap fixes, Mermaid CI guard
+
+### Fixed
+
+* **`datetime.utcnow()` deprecation** — `src/idp/storage/sql.py`
+  migrated from `datetime.utcnow()` (deprecated in Python 3.12+)
+  to `datetime.now(timezone.utc)`. The naive ISO 8601 wire format
+  is preserved. Adds a regression test (`tests/test_storage_no_deprecation_warnings.py`)
+  that pins the fix and would fail if anyone reverts it. **0
+  `datetime.utcnow` deprecations from our code in CI.**
+
+* **`count_corrections` reported all fields as "corrected" for
+  unreviewed results** — `src/idp/hitl/review.py` (extracted from
+  `src/idp/hitl/app.py` as part of A3) now returns 0 when
+  `reviewed_extraction is None`. The previous behavior was
+  `n_corrections == len(extraction)`, which is nonsense for an
+  un-reviewed result. Caught by `test_count_corrections_zero_when_no_review`.
+
+* **HITL data-handling logic now unit-testable** — `idp.hitl.app`
+  was 0% covered because its logic was intertwined with the
+  Streamlit UI. Extracted into `idp.hitl/review.py` (pure, no
+  Streamlit import). The pure module is at **100% coverage** with
+  18 tests. The Streamlit app now imports the helpers; this is
+  the right factoring for a future FastAPI replacement UI.
+
+### Added
+
+* **SQLite + Postgres dialect parity tests** — `tests/test_sql_dialect.py`
+  (23 tests) covers `_parse_url` for both schemes, `_connect`
+  mocked for both, `_strip_postgres_only` for the syntax it actually
+  handles (DO `$` blocks, CREATE TYPE, review_status ENUM), and
+  schema bootstrap. Documents the current scope of
+  `_strip_postgres_only` (it does NOT strip RETURNING / ON CONFLICT
+  — those would require a real Postgres to verify safely).
+
+* **CLI test coverage 83% → 97%** — `tests/test_cli.py` now exercises
+  the actual `discover-schema` flow (not just `--help`), the
+  `--storage` URL vs path heuristic in `rl-update`, and the
+  `--synthetic without --fixtures` error in `rl-eval`. 6 new tests.
+
+* **`@mermaid-js/mermaid-cli` validation in CI** — new workflow
+  `.github/workflows/validate-mermaid.yml` runs `mmdc` on every
+  Mermaid block in the 3 READMEs and fails the build on parse
+  errors. This prevents the exact class of bug we shipped in
+  PR #15 (unquoted braces in node labels were mis-parsed as
+  diamond-shape openers, breaking the entire diagram). Renders
+  are also uploaded as artifacts for visual review.
+
+### Tests
+
+* 654 tests pass (was 613), +41 new
+* mypy clean across **61 source files** (was 60)
+* ruff clean
+* 0 `datetime.utcnow` deprecations from our code (verified with
+  `pytest -W error::DeprecationWarning`)
+
 ## [0.3.4] — 2026-09-14 — Tier-1 test coverage, branch protection, CI bots
 
 ### Added

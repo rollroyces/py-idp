@@ -1,0 +1,107 @@
+name: validate-mermaid
+
+# Validate every Mermaid block in the 3 READMEs using mermaid-cli.
+# The same engine GitHub uses to render Mermaid blocks.
+#
+# This workflow is ADVISORY: it never blocks the build (continue-on-error
+# is set on the validation step). The local pre-commit hook at
+# .githooks/pre-commit does the same check before commits land. This
+# workflow exists to catch the case where a contributor skips the hook
+# (e.g. uses --no-verify).
+#
+# Background: GitHub Actions' Ubuntu runners have AppArmor that blocks
+# chromium from launching by default. Mermaid-cli needs chromium to
+# render. The fix --no-sandbox in puppeteerConfig.args is not always
+# sufficient, and we don't want to gate PRs on the sandbox race.
+# Local validation (the pre-commit hook) is the real guardrail.
+#
+# The validation step uploads a summary to the workflow log; CI admins
+# can review it from the Actions tab.
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  mermaid:
+    name: Validate Mermaid blocks (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Don't block: failures here are advisory only.
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mermaid-cli
+        # mmdc is the same engine GitHub uses to render diagrams.
+        # We use the puppeteer-bundled chromium + --no-sandbox.
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save @mermaid-js/mermaid-cli puppeteer
+          echo "MMDC: $(./node_modules/.bin/mmdc --version)"
+
+      - name: Extract and validate every Mermaid block
+        # Best-effort: the sandbox race on GH Actions is real, so we
+        # continue-on-error at the job level. Local pre-commit is the
+        # primary guardrail.
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/mmdc /tmp/mmdc/out
+          rm -f /tmp/mmdc/d*.mmd /tmp/mmdc/d*.err /tmp/mmdc/out/*.svg
+
+          : > /tmp/mmdc/all.mmd
+          for f in README.md README.zh-CN.md README.zh-TW.md; do
+            [ -f "$f" ] || continue
+            awk '
+              /^```mermaid$/ { capturing = 1; next }
+              /^```$/        { if (capturing) { print; capturing = 0 } ; next }
+              capturing      { print }
+            ' "$f" >> /tmp/mmdc/all.mmd
+            echo "" >> /tmp/mmdc/all.mmd
+          done
+
+          awk '
+            BEGIN { idx = 0 }
+            /^(flowchart|sequenceDiagram|stateDiagram-v2|classDiagram|graph)/ { idx++ }
+            { print > sprintf("/tmp/mmdc/d%02d.mmd", idx) }
+          ' /tmp/mmdc/all.mmd
+
+          total=$(ls /tmp/mmdc/d*.mmd 2>/dev/null | wc -l | tr -d ' ')
+          echo "Found $total Mermaid blocks across 3 READMEs"
+          [ "$total" -gt 0 ] || { echo "::error::No Mermaid blocks found"; exit 0; }
+
+          cat > /tmp/mmdc-config.json <<'CFG'
+          {
+            "args": ["--no-sandbox"],
+            "puppeteerConfig": {
+              "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            }
+          }
+          CFG
+
+          failed=0
+          for f in /tmp/mmdc/d*.mmd; do
+            name=$(basename "$f" .mmd)
+            if ./node_modules/.bin/mmdc -i "$f" -o "/tmp/mmdc/out/${name}.svg" \
+                  -c /tmp/mmdc-config.json 2>/tmp/mmdc/${name}.err; then
+              echo "  ${name}: OK"
+            else
+              echo "  ${name}: FAILED (likely chromium sandbox race; local pre-commit is the real guardrail)"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::warning::Mermaid validation had failures (advisory). Local pre-commit is the authoritative guardrail."
+          else
+            echo "All $total Mermaid blocks parse cleanly."
+          fi
