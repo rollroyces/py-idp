@@ -22,6 +22,28 @@
 
 ---
 
+## 目录
+
+- [安装](#安装)
+- [30 秒快速上手](#30-秒快速上手)
+- [流水线](#流水线)
+- [LLM 后端](#llm-后端)
+- [命令行工具](#命令行工具)
+- [自定义 Schema](#自定义-schema)
+- [Schema 自动发现](#schema-自动发现)
+- [超大文档分块](#超大文档分块)
+- [添加业务规则](#添加业务规则)
+- [示例演示](#示例演示)
+- [评测工具集](#评测工具集)
+- [可靠性：重试、缓存、检查点](#可靠性重试缓存检查点)
+- [生产级脚手架](#生产级脚手架内置按需启用)
+- [从 HITL 修正中学习（RL）](#从-hitl-修正中学习rl)
+- [开发](#开发)
+- [安全](#安全)
+- [许可证](#许可证)
+
+---
+
 ## 安装
 
 ```bash
@@ -90,15 +112,28 @@ print(result.validation)    # dict —— Schema 与业务规则校验结果
 
 ## 流水线
 
-```text
-INGEST  →  PARSE  →  CLASSIFY  →  ROUTE  →  EXTRACT  →  ASSESS  →  VALIDATE  →  HITL
-                                                                         (Streamlit)
+```mermaid
+flowchart LR
+    A[INGEST<br/>文件路径 / URL / 字节] --> B[PARSE<br/>Docling · pdfplumber · 纯文本]
+    B --> C[CLASSIFY<br/>规则优先，LLM 兜底]
+    C --> D{ROUTE<br/>多模态还是<br/>OCR+LLM？}
+    D -->|多模态| E1[EXTRACT<br/>图像 → VLM]
+    D -->|OCR+LLM| E2[EXTRACT<br/>文本 → LLM]
+    E1 --> F[ASSESS<br/>逐字段置信度]
+    E2 --> F
+    F --> G[VALIDATE<br/>Pydantic + 业务规则]
+    G --> H{有低<br/>置信度？}
+    H -->|是| I[HITL<br/>Streamlit 复核]
+    H -->|否| J[(PipelineResult)]
+    I --> K[保存修正<br/>+ 更新策略]
+    K --> J
 ```
 
 每个阶段都是 `Document` 上的纯函数。它们独立运行、可单独单元测试、任何一个都可以替换。
 
 | 阶段 | 模块 | 默认实现 | 功能 |
 |---|---|---|---|
+| **INGEST** | `idp.core.document` | `Document.from_path` | 将字节装入 `Document`（路径、URL 或内存） |
 | **parse** | `idp.parse` | Docling（PDF）· pdfplumber（兜底）· 纯文本 | 抽取文本 + 表格 + 页面图像 |
 | **classify** | `idp.classify` | 规则优先，LLM 兜底 | 识别文档类型：invoice、contract、bank_statement…… |
 | **route** | `idp.parse.router` | 自动 | 根据文档特征选择多模态 VLM 或 OCR+LLM |
