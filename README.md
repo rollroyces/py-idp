@@ -391,6 +391,8 @@ and [`tests/test_chunker.py`](https://github.com/rollroyces/py-idp/blob/main/tes
 
 ```bash
 idp run path/to/invoice.pdf --schema Invoice --backend ollama --output out.json
+idp batch path/to/invoices/ --backend ollama --schema Invoice \    # many docs in one shot
+              --output out.jsonl --report report.json --dlq dlq.jsonl
 idp providers                                          # full provider table
 idp schemas                                            # built-in Pydantic schemas
 idp discover-schema scan.pdf --hint "extract vendor_name, total_amount" --output schema.json
@@ -400,6 +402,37 @@ idp serve                                              # launch Streamlit HITL U
 ```
 
 For copy-pasteable scripts that show each backend / pipeline pattern end-to-end, see [`examples/`](https://github.com/rollroyces/py-idp/blob/main/examples/README.md) — every numbered example is runnable offline with `python examples/NN_*.py` and falls back to `MockBackend` if no API key is set.
+
+### Batch processing (100s–1000s of documents)
+
+For runs over many documents (Databricks jobs, cron sweeps, S3 prefix replay), use the `idp batch` CLI instead of looping `idp run`:
+
+```bash
+idp batch /mnt/inbox/ \                         # directory: recursive scan for *.pdf/*.png/*.jpg/*.tiff/*.txt
+          --backend ollama --schema Invoice \
+          --output out.jsonl \                  # per-doc JSONL: path, ok, extraction, classification, confidence, ...
+          --report report.json \                # aggregate: throughput, p50/p95 latency, error histogram
+          --dlq dlq.jsonl \                     # failed docs only (for a 2nd-pass retry)
+          --checkpoint ledger.jsonl \           # resume ledger: rerun picks up where it stopped
+          --progress-every 50                   # log every 50 docs; 0 to silence
+```
+
+Sources can also be a glob, an explicit list (`@/mnt/inbox.lst`), or multiple paths mixed with directories. Files are deduplicated by absolute path. Mermaid of the flow:
+
+```mermaid
+flowchart LR
+    A["sources<br/>(paths / dirs / @file)"] --> B["collect_paths"]
+    B --> C["process_batch<br/>(per doc: pipeline.run)"]
+    C --> D["out.jsonl<br/>(per-doc JSONL)"]
+    C --> E["dlq.jsonl<br/>(failed only)"]
+    C --> F["checkpoint.jsonl<br/>(resume ledger)"]
+    D --> G["report.json<br/>(throughput, latency,<br/>error histogram)"]
+    style C fill:#f9f,stroke:#333
+```
+
+For programmatic use, `idp.process_batch` and `idp.BatchItemResult` are exported at the top level — `from idp import process_batch` works directly. (The legacy import `from idp.llm.nanonets_batch import process_batch` is kept as a 12-line re-export shim.)
+
+The pipeline is **serial** in v0.3.x — concurrency is a future add. For now, expect roughly the same throughput as a single `idp run` per doc.
 
 ---
 
@@ -1054,7 +1087,7 @@ python -m examples.batch        # process_batch() helper for Databricks-style ba
 python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
-`import idp; idp.__version__` → `0.3.5`.
+`import idp; idp.__version__` → `0.3.6`.
 
 ---
 

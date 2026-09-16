@@ -51,9 +51,33 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from idp.errors import TemplateNotFoundError, TemplateParseError
+
+# yaml is optional: ``templates`` is a feature, not a core dependency.
+# If a user calls load_template() without PyYAML installed, we raise a
+# helpful ImportError pointing to the optional dep instead of crashing
+# at module import time.
+yaml: Any = None
+
+
+def _require_yaml() -> Any:
+    """Import PyYAML on first use, raising a clear error if absent.
+
+    Templates are an opt-in feature; users who don't load templates
+    never pay the import cost. Keeps ``import idp`` working on a
+    bare pip install.
+    """
+    global yaml
+    if yaml is None:
+        try:
+            import yaml as _yaml
+        except ImportError as e:
+            raise ImportError(
+                "idp.templates requires PyYAML. Install it with "
+                "`pip install PyYAML` (or `pip install py-idp[templates]`)."
+            ) from e
+        yaml = _yaml
+    return yaml
 
 # Required frontmatter keys. If any are missing the file is rejected at
 # load time (no silent defaults — typos like ``schame: Invoice`` should
@@ -158,9 +182,10 @@ def _parse_frontmatter(text: str, source_path: Path) -> tuple[dict[str, Any], st
         )
     fm_raw = m.group("fm")
     body = m.group("body")
+    _yaml = _require_yaml()
     try:
-        fm = yaml.safe_load(fm_raw)
-    except yaml.YAMLError as e:
+        fm = _yaml.safe_load(fm_raw)
+    except _yaml.YAMLError as e:
         raise TemplateParseError(f"template {source_path}: invalid YAML: {e}") from e
     if not isinstance(fm, dict):
         raise TemplateParseError(

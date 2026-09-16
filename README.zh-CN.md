@@ -333,6 +333,8 @@ result = pipe.run(Document.from_path("huge-50-page-scan.pdf"))
 
 ```bash
 idp run path/to/invoice.pdf --schema Invoice --backend ollama --output out.json
+idp batch path/to/invoices/ --backend ollama --schema Invoice \    # 批量处理
+              --output out.jsonl --report report.json --dlq dlq.jsonl
 idp providers                                          # 完整 provider 表
 idp schemas                                            # 内置 Pydantic Schema
 idp discover-schema scan.pdf --hint "extract vendor_name, total_amount" --output schema.json
@@ -340,6 +342,26 @@ idp eval --dataset src/idp/eval/datasets/invoices \
           --strategy mock,mock-omits --output results.json
 idp serve                                              # 启动 Streamlit HITL UI，端口 :8501
 ```
+
+### 批量处理（数百至数千份文档）
+
+对于需要处理大量文档的场景（Databricks 任务、cron 定时作业、S3 前缀重放），推荐使用 `idp batch` 命令，而不是循环调用 `idp run`：
+
+```bash
+idp batch /mnt/inbox/ \                         # 目录：递归扫描 *.pdf/*.png/*.jpg/*.tiff/*.txt
+          --backend ollama --schema Invoice \
+          --output out.jsonl \                  # 每篇文档一条 JSONL：path, ok, extraction, ...
+          --report report.json \                # 聚合：吞吐量、p50/p95 延迟、错误直方图
+          --dlq dlq.jsonl \                     # 仅失败文档（用于二次重试）
+          --checkpoint ledger.jsonl \           # 续跑账本：重跑时从中断处继续
+          --progress-every 50                   # 每 50 篇打一次日志；0 表示静默
+```
+
+数据源可以是 glob 模式、显式列表（`@/mnt/inbox.lst`），或路径与目录的任意组合。文件按绝对路径去重。
+
+编程接口：`idp.process_batch` 与 `idp.BatchItemResult` 已导出至顶层 —— `from idp import process_batch` 即可使用。（旧路径 `from idp.llm.nanonets_batch import process_batch` 保留为 12 行 re-export 兼容垫片。）
+
+v0.3.x 中流水线为**串行执行**；并发支持将在未来版本加入。当前的吞吐大致与单篇 `idp run` 相同。
 
 ---
 
@@ -740,7 +762,7 @@ python -m examples.batch        # process_batch() 批量助手，用于 Databric
 python -m examples.discover_schema_sample  # AI 驱动的 Schema 发现（6 个场景，生成真实 PDF）
 ```
 
-`import idp; idp.__version__` → `0.3.5`.
+`import idp; idp.__version__` → `0.3.6`.
 
 ---
 
