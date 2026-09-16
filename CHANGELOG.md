@@ -5,6 +5,54 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.6] — 2026-09-16 — `idp batch` CLI, batch module home
+
+### Added
+
+* **`idp batch` CLI** — new command for running the pipeline over
+  many documents. Replaces the previous pattern of looping
+  `idp run` or calling `process_batch` directly. Example:
+  ```bash
+  idp batch /mnt/inbox/ --backend ollama --schema Invoice \
+            --output out.jsonl --report report.json --dlq dlq.jsonl
+  ```
+  Sources can be paths, directories (recursive scan for *.pdf /
+  *.png / *.jpg / *.tiff / *.txt), or `@<file>` (path list).
+  Produces per-doc JSONL, an aggregate summary (throughput,
+  p50/p95 latency, error histogram), and a dead-letter queue for
+  failed docs.
+
+* **`idp.process_batch` and `idp.BatchItemResult` exposed at top
+  level** — `from idp import process_batch` works directly. The
+  helper was already there; now it's discoverable at the top
+  of the package.
+
+* **`idp.cli_sources` module** — small path-collection helper
+  (`collect_paths`) used by the `idp batch` CLI, exposed for
+  scripts that want the same path-discovery behavior without
+  going through Typer.
+
+### Changed
+
+* **`idp.llm.nanonets_batch` → `idp.batch`** — the existing
+  `process_batch` helper moved to its proper home. The old path
+  is kept as a 12-line re-export shim
+  (`from idp.llm.nanonets_batch import process_batch` still
+  works). The old name was misleading — the helper works with
+  any backend, not just Nanonets.
+
+* **CI ruff strictness** — `.github/workflows/tests.yml` and the
+  local ruff now agree on F841 (unused local) and I001
+  (import-order). The batch CLI's file-handle code was
+  restructured to satisfy F841 without a `del` workaround.
+
+### Tests
+
+* 654 → 665 (+11): `tests/test_cli_batch.py` covers
+  `collect_paths` (file / dir / @file / dedup / errors) and the
+  full CLI surface (`--help`, `--dry-run`, output files,
+  missing-source exit codes).
+
 ## [0.3.5] — 2026-09-15 — Tier-A roadmap fixes, Mermaid CI guard
 
 ### Fixed
