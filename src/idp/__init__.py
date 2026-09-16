@@ -23,6 +23,7 @@ Design draws from:
   - Unstructured-IO/unstructured              (chunking + multi-format ingest)
 """
 
+from idp.batch import BatchItemResult, process_batch
 from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
 from idp.errors import IDPError, error_envelope
@@ -35,6 +36,7 @@ from idp.templates import Template, TemplateRegistry, load_template
 # can introspect it at runtime via `import idp; idp.__version__`.
 __version__ = "0.3.5"
 __all__ = [
+    "BatchItemResult",
     "Block",
     "DiscoveryResult",
     "Document",
@@ -47,4 +49,5 @@ __all__ = [
     "discover_schema",
     "error_envelope",
     "load_template",
+    "process_batch",
 ]
