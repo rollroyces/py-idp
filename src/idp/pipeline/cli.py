@@ -150,6 +150,154 @@ def discover_schema_cmd(
         console.print("\n[dim](pass --output FILE to save the JSON Schema)[/dim]")
 
 
+@app.command(name="batch")
+def batch(
+    sources: list[str] = typer.Argument(
+        ...,
+        help="Paths to documents, directories (recursively scanned for PDFs/images), or @<file> for a path list.",
+    ),
+    backend: str = typer.Option("mock", "--backend", "-b", help="LLM backend (mock, openai, ollama, etc.)"),
+    schema_name: str = typer.Option("Invoice", "--schema", "-s", help="Pydantic schema name"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Per-doc JSONL output file (default: stdout)"),
+    report: str | None = typer.Option(None, "--report", "-r", help="Aggregate summary JSON file"),
+    dlq: str | None = typer.Option(None, "--dlq", help="Failed-doc JSONL file (dead-letter queue)"),
+    checkpoint: str | None = typer.Option(None, "--checkpoint", help="Resume ledger path (idempotent across runs)"),
+    limit: int | None = typer.Option(None, "--limit", help="Process at most N docs (for sampling)"),
+    progress_every: int = typer.Option(10, "--progress-every", help="Log every N docs (0 = silent)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="List what would be processed, don't run"),
+):
+    """Run a pipeline over many documents and write per-doc results.
+
+    Each SOURCES argument is a path (file or directory) or @<file> for a
+    text file with one path per line. Directories are recursively scanned
+    for *.pdf, *.png, *.jpg, *.jpeg, *.tiff, *.txt.
+
+    Output JSONL is one record per document with: path, ok, doc_id,
+    schema, backend, classification, extraction, confidence, etc.
+    A summary report (with totals, latency, error histogram) is written
+    if --report is given. Failed docs go to --dlq if given.
+    """
+    import json
+    import time
+    from pathlib import Path
+
+    from idp.batch import process_batch
+
+    # 1. Discover paths from the source arguments.
+    from idp.cli_sources import collect_paths
+    from idp.pipeline.pipeline import Pipeline
+    try:
+        all_paths = collect_paths(sources)
+    except FileNotFoundError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(code=1) from None
+    if limit is not None:
+        all_paths = all_paths[:limit]
+
+    if dry_run:
+        console.print(f"[cyan]dry-run: would process {len(all_paths)} documents:[/cyan]")
+        for p in all_paths[:20]:
+            console.print(f"  {p}")
+        if len(all_paths) > 20:
+            console.print(f"  ... and {len(all_paths) - 20} more")
+        return
+
+    if not all_paths:
+        console.print("[red]error:[/red] no documents found from sources")
+        raise typer.Exit(code=1)
+
+    console.print(f"[cyan]found {len(all_paths)} documents; backend={backend} schema={schema_name}[/cyan]")
+
+    # 2. Build the pipeline.
+    pipeline = Pipeline(backend=backend, schema=schema_name)
+
+    # 3. Open output files. Using contextlib.ExitStack so we can
+    # open 0-3 files based on which CLI flags were passed and
+    # still close them all automatically on exit (even on error).
+    import contextlib
+    out_path = Path(output) if output else None
+    dlq_path = Path(dlq) if dlq else None
+    report_path = Path(report) if report else None
+
+    # 4. Run the batch.
+    started = time.perf_counter()
+    counts = {"succeeded": 0, "failed": 0, "skipped": 0}
+    latencies: list[float] = []
+    error_types: dict[str, int] = {}
+
+    with contextlib.ExitStack() as stack:
+        out_fh = stack.enter_context(open(out_path, "w")) if out_path else None
+        dlq_fh = stack.enter_context(open(dlq_path, "w")) if dlq_path else None
+        try:
+            results = process_batch(
+                [str(p) for p in all_paths],
+                pipeline,
+                progress_every=progress_every,
+                checkpoint=checkpoint,
+            )
+            for r in results:
+                if r.ok:
+                    counts["succeeded"] += 1
+                else:
+                    counts["failed"] += 1
+                    # crude error-type bucketing
+                    err = (r.error or "").split(":", 1)[0]
+                    error_types[err] = error_types.get(err, 0) + 1
+                    if dlq_fh is not None:
+                        dlq_fh.write(json.dumps(r.to_dict()) + "\n")
+                latencies.append(r.elapsed_seconds)
+
+                line = json.dumps(r.to_dict()) + "\n"
+                if out_fh is not None:
+                    out_fh.write(line)
+                else:
+                    # write to stdout (one JSON object per line)
+                    console.print(line.rstrip())
+
+                if progress_every and (counts["succeeded"] + counts["failed"]) % progress_every == 0:
+                    elapsed = time.perf_counter() - started
+                    done = counts["succeeded"] + counts["failed"]
+                    console.print(
+                        f"[dim]progress: {done}/{len(all_paths)} "
+                        f"({100*done/len(all_paths):.0f}%) "
+                        f"ok={counts['succeeded']} "
+                        f"fail={counts['failed']} "
+                        f"elapsed={elapsed:.1f}s[/dim]"
+                    )
+        finally:
+            pass  # ExitStack closes out_fh / dlq_fh on exit
+
+    # The report file is written AFTER the ExitStack exits (so we don't
+    # hold the file open while the batch runs). Open it explicitly here.
+    total_elapsed = time.perf_counter() - started
+    latencies_sorted = sorted(latencies)
+    p50 = latencies_sorted[len(latencies_sorted) // 2] if latencies_sorted else 0.0
+    p95 = latencies_sorted[int(0.95 * len(latencies_sorted))] if latencies_sorted else 0.0
+
+    summary = {
+        "total": counts["succeeded"] + counts["failed"],
+        "succeeded": counts["succeeded"],
+        "failed": counts["failed"],
+        "elapsed_seconds": round(total_elapsed, 3),
+        "throughput_docs_per_sec": round((counts["succeeded"] + counts["failed"]) / total_elapsed, 3) if total_elapsed > 0 else 0,
+        "latency_p50_sec": round(p50, 3),
+        "latency_p95_sec": round(p95, 3),
+        "error_types": error_types,
+        "backend": backend,
+        "schema": schema_name,
+        "checkpoint": checkpoint,
+    }
+
+    if report_path is not None:
+        report_path.write_text(json.dumps(summary, indent=2))
+    else:
+        # always print summary to stderr so stdout stays clean JSONL
+        console.print(f"[bold green]summary:[/bold green] {json.dumps(summary)}")
+
+    if counts["failed"]:
+        raise typer.Exit(code=2)
+
+
 @app.command()
 def serve(
     port: int = typer.Option(8501, help="Port for the Streamlit HITL UI."),
