@@ -155,3 +155,119 @@ def test_parse_document_nonexistent_file(tmp_path):
 def _doc_with_fake_path(path: str) -> Document:
     # Document.from_path raises if the file doesn't exist; construct directly
     return Document(source_path=path, doc_id="fake")
+
+
+# ---------------------------------------------------------------------------
+# DoclingParser.parse() — mocked (lines 133-165)
+# ---------------------------------------------------------------------------
+def test_docling_parser_parse_with_mocked_converter(tmp_path):
+    """DoclingParser.parse() handles a mock conversion result correctly."""
+    from unittest.mock import MagicMock
+
+    from idp.parse.parser import DoclingParser
+
+    parser = DoclingParser.__new__(DoclingParser)  # bypass __init__ (no docling)
+    # Build a mock that mimics docling's ConversionResult.document
+    mock_page = MagicMock()
+    mock_page.main_text = [MagicMock(text="Page one line 1"), MagicMock(text="Page one line 2")]
+    mock_table = MagicMock()
+    mock_table.data = [["a", "b"], ["1", "2"]]
+    mock_table.export_to_markdown.return_value = "| a | b |\n| 1 | 2 |"
+    mock_doc = MagicMock()
+    mock_doc.pages = [mock_page]
+    mock_doc.tables = [mock_table]
+    mock_doc.export_to_markdown.return_value = "# full markdown\npage 1 text"
+    mock_result = MagicMock()
+    mock_result.document = mock_doc
+    parser._converter = MagicMock()
+    parser._converter.convert.return_value = mock_result
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    out = parser.parse(str(pdf))
+    assert out["text"] == "# full markdown\npage 1 text"
+    assert len(out["pages"]) == 1
+    assert out["pages"][0]["page"] == 1
+    assert "Page one line 1" in out["pages"][0]["text"]
+    assert out["pages"][0]["image_path"] is None
+    assert len(out["tables"]) == 1
+    assert out["tables"][0]["rows"] == [["a", "b"], ["1", "2"]]
+    assert out["metadata"]["parser"] == "docling"
+    assert out["metadata"]["size"] > 0
+
+
+def test_docling_parser_parse_handles_table_without_export_method(tmp_path):
+    """Tables lacking export_to_markdown get an empty markdown field."""
+    from unittest.mock import MagicMock
+
+    from idp.parse.parser import DoclingParser
+
+    parser = DoclingParser.__new__(DoclingParser)
+    mock_doc = MagicMock()
+    mock_doc.pages = []
+    # A "table" object without export_to_markdown method
+    mock_table = MagicMock(spec=["data"])  # only has .data
+    mock_table.data = [["x"]]
+    mock_doc.tables = [mock_table]
+    mock_doc.export_to_markdown.return_value = "full text"
+    mock_result = MagicMock()
+    mock_result.document = mock_doc
+    parser._converter = MagicMock()
+    parser._converter.convert.return_value = mock_result
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    out = parser.parse(str(pdf))
+    assert out["tables"][0]["markdown"] == ""
+    # pages is empty -> fall back to a single full-text page
+    assert len(out["pages"]) == 1
+    assert out["pages"][0]["text"] == "full text"
+
+
+def test_docling_parser_parse_handles_page_items_without_text_attr(tmp_path):
+    """Page items without .text attribute are skipped gracefully."""
+    from unittest.mock import MagicMock
+
+    from idp.parse.parser import DoclingParser
+
+    parser = DoclingParser.__new__(DoclingParser)
+    # page item has no .text attr -> the hasattr() check filters it
+    mock_page_item_no_text = MagicMock(spec=[])  # no .text attribute
+    mock_page_item_with_text = MagicMock(text="present")
+    mock_page = MagicMock()
+    mock_page.main_text = [mock_page_item_no_text, mock_page_item_with_text]
+    mock_doc = MagicMock()
+    mock_doc.pages = [mock_page]
+    mock_doc.tables = []
+    mock_doc.export_to_markdown.return_value = "all"
+    mock_result = MagicMock()
+    mock_result.document = mock_doc
+    parser._converter = MagicMock()
+    parser._converter.convert.return_value = mock_result
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    out = parser.parse(str(pdf))
+    assert out["pages"][0]["text"] == "present"  # only the one with .text
+
+
+def test_docling_parser_parse_handles_no_tables(tmp_path):
+    """When doc.tables is None or empty, no tables section returned."""
+    from unittest.mock import MagicMock
+
+    from idp.parse.parser import DoclingParser
+
+    parser = DoclingParser.__new__(DoclingParser)
+    mock_doc = MagicMock()
+    mock_doc.pages = []
+    mock_doc.tables = None  # explicitly None
+    mock_doc.export_to_markdown.return_value = "x"
+    mock_result = MagicMock()
+    mock_result.document = mock_doc
+    parser._converter = MagicMock()
+    parser._converter.convert.return_value = mock_result
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    out = parser.parse(str(pdf))
+    assert out["tables"] == []
