@@ -17,7 +17,6 @@ from typer.testing import CliRunner
 from idp.cli_sources import collect_paths
 from idp.pipeline.cli import app
 
-
 # --- collect_paths unit tests --------------------------------------------
 
 

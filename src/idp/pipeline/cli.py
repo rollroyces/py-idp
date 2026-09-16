@@ -228,7 +228,6 @@ def batch(
     with contextlib.ExitStack() as stack:
         out_fh = stack.enter_context(open(out_path, "w")) if out_path else None
         dlq_fh = stack.enter_context(open(dlq_path, "w")) if dlq_path else None
-        report_fh = stack.enter_context(open(report_path, "w")) if report_path else None
         try:
             results = process_batch(
                 [str(p) for p in all_paths],
@@ -266,9 +265,10 @@ def batch(
                         f"elapsed={elapsed:.1f}s[/dim]"
                     )
         finally:
-            pass  # ExitStack closes files
+            pass  # ExitStack closes out_fh / dlq_fh on exit
 
-    # 5. Summary report.
+    # The report file is written AFTER the ExitStack exits (so we don't
+    # hold the file open while the batch runs). Open it explicitly here.
     total_elapsed = time.perf_counter() - started
     latencies_sorted = sorted(latencies)
     p50 = latencies_sorted[len(latencies_sorted) // 2] if latencies_sorted else 0.0
