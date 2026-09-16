@@ -527,3 +527,188 @@ def test_pipeline_with_cache_serves_repeat(tmp_path):
     cache.close()
 
 
+
+
+# ---------------------------------------------------------------------------
+# RetryingBackend: ExtractionError retry path (lines 189-210, 228)
+# ---------------------------------------------------------------------------
+def test_retrying_backend_retries_on_extraction_error_retryable():
+    """Backend raises RateLimitError (retryable=True) -> should retry then succeed.
+
+    This pins the ``except ExtractionError as e:`` branch in the retry loop
+    (lines 189-210). The previous tests only exercised the
+    ``except Exception`` branch (raw Exception → classify_exception).
+    """
+    from idp.reliability import ExtractionError
+
+    call_count = [0]
+
+    class _Backend:
+        name = "ext-fail"
+        is_multimodal = False
+
+        def complete(self, req):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                raise ExtractionError("rate limit hit", backend_name="ext-fail")
+            return '{"ok": true}'
+
+    retry = RetryingBackend(
+        _Backend(),
+        RetryConfig(max_retries=5, initial_delay_sec=0.001, jitter=0.0),
+    )
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    out = retry.complete(req)
+    assert out == '{"ok": true}'
+    assert call_count[0] == 3  # 2 failures + 1 success
+
+
+def test_retrying_backend_does_not_retry_non_retryable_extraction_error():
+    """Backend raises BadRequestError (retryable=False) -> should fail fast.
+
+    Pins line 191-197 (the ``if not e.retryable: raise`` branch).
+    """
+    from idp.reliability import BadRequestError
+
+    call_count = [0]
+
+    class _Backend:
+        name = "bad-req"
+        is_multimodal = False
+
+        def complete(self, req):
+            call_count[0] += 1
+            raise BadRequestError("invalid schema", backend_name="bad-req")
+
+    retry = RetryingBackend(
+        _Backend(),
+        RetryConfig(max_retries=5, initial_delay_sec=0.001, jitter=0.0),
+    )
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    with pytest.raises(BadRequestError):
+        retry.complete(req)
+    assert call_count[0] == 1  # fail-fast, no retries
+
+
+def test_retrying_backend_exhausts_retries_on_extraction_error():
+    """Backend always raises retryable ExtractionError -> raises after max_retries.
+
+    Pins lines 199-204 (the ``if attempt + 1 >= max_retries: raise`` branch)
+    for the ExtractionError path.
+    """
+    from idp.reliability import RateLimitError
+
+    call_count = [0]
+
+    class _Backend:
+        name = "exhaust"
+        is_multimodal = False
+
+        def complete(self, req):
+            call_count[0] += 1
+            raise RateLimitError("429", backend_name="exhaust")
+
+    retry = RetryingBackend(
+        _Backend(),
+        RetryConfig(max_retries=3, initial_delay_sec=0.001, jitter=0.0),
+    )
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    with pytest.raises(RateLimitError):
+        retry.complete(req)
+    assert call_count[0] == 3  # all 3 attempts
+
+
+def test_retrying_backend_unclassified_exception_not_retryable():
+    """Backend raises Exception that classifies as non-retryable -> no retry.
+
+    Pins lines 211-214 (the ``if not classified.retryable: raise`` branch
+    in the ``except Exception`` arm).
+    """
+    from idp.reliability import AuthError
+
+    call_count = [0]
+
+    class _Backend:
+        name = "auth"
+        is_multimodal = False
+
+        def complete(self, req):
+            call_count[0] += 1
+            raise Exception("401 Unauthorized: bad api key")
+
+    retry = RetryingBackend(
+        _Backend(),
+        RetryConfig(max_retries=5, initial_delay_sec=0.001, jitter=0.0),
+    )
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    with pytest.raises(AuthError):
+        retry.complete(req)
+    assert call_count[0] == 1  # classified as auth -> fail-fast
+
+
+# ---------------------------------------------------------------------------
+# classify_exception: passthrough for already-typed ExtractionError (line 109)
+# ---------------------------------------------------------------------------
+def test_classify_extraction_error_returns_same_instance():
+    """classify_exception is idempotent for already-ExtractionError inputs."""
+    from idp.reliability import RateLimitError, classify_exception
+
+    e = RateLimitError("already typed", backend_name="orig")
+    out = classify_exception(e)
+    assert out is e  # same instance, no reclassification
+
+
+# ---------------------------------------------------------------------------
+# ExtractionCache: image content in hash (lines 259-260)
+# ---------------------------------------------------------------------------
+def test_extraction_cache_hash_distinguishes_images_by_length():
+    """Hash function includes each image's length — different lengths => different hashes."""
+    from idp.reliability import hash_request
+
+    req1 = CompletionRequest(
+        messages=[Message(role="user", content="hi", images_b64=["a" * 4])]
+    )
+    req2 = CompletionRequest(
+        messages=[Message(role="user", content="hi", images_b64=["b" * 999])]
+    )
+    key1 = hash_request(req1, schema_name="S", backend_name="B")
+    key2 = hash_request(req2, schema_name="S", backend_name="B")
+    assert key1 != key2  # different lengths hash to different keys
+    # Identical-length images hash the same way (documented design choice —
+    # see hash_request note re: base64 content not hashed; pinning the
+    # current behavior so a future change is intentional).
+    req3 = CompletionRequest(
+        messages=[Message(role="user", content="hi", images_b64=["c" * 4])]
+    )
+    assert hash_request(req3, schema_name="S", backend_name="B") == key1
+
+
+# ---------------------------------------------------------------------------
+# _testing_backends.SlowMockBackend — gated by IDP_ENABLE_SLOWMOCK
+# ---------------------------------------------------------------------------
+def test_slowmock_backend_disabled_by_default(monkeypatch):
+    """slowmock backend refuses to instantiate without IDP_ENABLE_SLOWMOCK=1."""
+    monkeypatch.delenv("IDP_ENABLE_SLOWMOCK", raising=False)
+    from idp.llm.backend import get_backend
+
+    with pytest.raises(ValueError, match="slowmock backend is disabled"):
+        get_backend("slowmock")
+
+
+def test_slowmock_backend_sleeps_then_responds(monkeypatch):
+    """SlowMockBackend sleeps ~latency_ms then returns a valid completion."""
+    monkeypatch.setenv("IDP_ENABLE_SLOWMOCK", "1")
+    monkeypatch.setenv("LOAD_LATENCY_MS", "20")
+    monkeypatch.setenv("LOAD_JITTER_MS", "0")
+    from idp.llm.backend import get_backend
+
+    backend = get_backend("slowmock")
+    assert backend.name == "slowmock"
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    import time
+    t0 = time.perf_counter()
+    out = backend.complete(req)
+    elapsed = time.perf_counter() - t0
+    assert elapsed >= 0.015  # slept at least ~20ms
+    assert isinstance(out, str)
+    assert len(out) > 0

@@ -195,3 +195,53 @@ def test_audit_db_skips_unknown_schemas(tmp_path: Path) -> None:
     assert report["total_rows"] == 1
     # Receipt has no v0.1 counterpart -> not flagged
     assert report["rows_v01_pass_v02_fail"] == 0
+
+# ---------------------------------------------------------------------------
+# main() CLI entry point (lines 101-114)
+# ---------------------------------------------------------------------------
+def test_migrate_audit_main_writes_output(tmp_path):
+    """main() parses args, runs audit, prints summary."""
+    import sys
+
+    from idp.migrate_audit import main
+
+    # Set up an empty DB with the schema
+    db = tmp_path / "idp.db"
+    SqlStorage(f"sqlite:///{db}")
+
+    # Invoke main() with sys.argv stub
+    out = tmp_path / "report.json"
+    saved_argv = sys.argv
+    sys.argv = ["migrate_audit", "--db-url", f"sqlite:///{db}", "--output", str(out)]
+    try:
+        rc = main()
+    finally:
+        sys.argv = saved_argv
+    assert rc == 0
+    # Report written
+    assert out.exists()
+    report = json.loads(out.read_text())
+    assert report["total_rows"] == 0
+    assert report["rows_v01_pass_v02_fail"] == 0
+
+
+def test_migrate_audit_main_without_output(tmp_path, capsys):
+    """main() prints to stdout if --output not given."""
+    import sys
+
+    from idp.migrate_audit import main
+
+    db = tmp_path / "idp.db"
+    SqlStorage(f"sqlite:///{db}")
+
+    saved_argv = sys.argv
+    sys.argv = ["migrate_audit", "--db-url", f"sqlite:///{db}"]
+    try:
+        rc = main()
+    finally:
+        sys.argv = saved_argv
+    assert rc == 0
+    captured = capsys.readouterr()
+    # Without --output, prints JSON summary to stdout
+    assert '"total_rows"' in captured.out
+    assert '"rows_v01_pass_v02_fail"' in captured.out

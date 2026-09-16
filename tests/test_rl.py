@@ -240,3 +240,69 @@ def test_end_to_end_policy_in_pipeline(tmp_path):
     assert res.document.confidence["vendor_name"] == pytest.approx(0.55)
     # invoice_number is also a non-empty string but no penalty -> 0.75
     assert res.document.confidence["invoice_number"] == pytest.approx(0.75)
+
+
+# ---------------------------------------------------------------------------
+# _norm_for_compare edge cases (lines 54, 73-77)
+# ---------------------------------------------------------------------------
+def test_norm_for_compare_rounds_floats():
+    from idp.rl.reward import _norm_for_compare
+    # Two floats that differ below 0.01 are treated as equal
+    assert _norm_for_compare(1.001) == _norm_for_compare(1.004)
+    # Floats above 0.01 apart are different
+    assert _norm_for_compare(1.0) != _norm_for_compare(1.5)
+
+
+def test_norm_for_compare_normalizes_dicts_and_lists():
+    from idp.rl.reward import _norm_for_compare
+    # Dict values are normalized (strings lowercased+stripped, floats rounded),
+    # but dict KEYS are kept verbatim — key normalization is the schema's job.
+    a = _norm_for_compare({"vendor": "  ACME  ", "total": 1.001})
+    b = _norm_for_compare({"vendor": "acme", "total": 1.004})
+    assert a == b
+    # Lists recurse
+    assert _norm_for_compare([1.001, "  Hello  "]) == _norm_for_compare([1.004, "hello"])
+
+
+def test_norm_for_compare_returns_other_types_unchanged():
+    from idp.rl.reward import _norm_for_compare
+    # ints, bools, etc. should be returned as-is
+    assert _norm_for_compare(42) == 42
+    assert _norm_for_compare(True) is True
+    assert _norm_for_compare((1, 2)) == (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# PolicyStats.as_dict (lines 114-130)
+# ---------------------------------------------------------------------------
+def test_policy_stats_as_dict_surfaces_top_failure_fields():
+    from idp.rl.reward import PolicyStats
+
+    stats = PolicyStats(
+        n_reviews=3,
+        n_fields=2,
+        per_field={
+            "vendor_name": {"+1": 2, "0": 1},  # fail rate 2/3
+            "total_amount": {"+1": 1, "0": 4},  # fail rate 1/5 = 0.2
+        },
+    )
+    out = stats.as_dict()
+    assert out["n_reviews"] == 3
+    assert out["n_fields"] == 2
+    top = out["top_failure_fields"]
+    # vendor_name (fail rate 0.667) comes first
+    assert top[0]["field"] == "vendor_name"
+    assert top[0]["fail_rate"] == 0.667
+    assert top[0]["n"] == 2
+    # total_amount second
+    assert top[1]["field"] == "total_amount"
+    assert top[1]["fail_rate"] == 0.2
+
+
+def test_policy_stats_as_dict_handles_empty_input():
+    from idp.rl.reward import PolicyStats
+
+    stats = PolicyStats()
+    out = stats.as_dict()
+    assert out["top_failure_fields"] == []
+    assert out["n_reviews"] == 0

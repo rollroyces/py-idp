@@ -421,3 +421,57 @@ def test_b24_extract_empty_text_skips_llm(tmp_path):
     assert isinstance(doc.extraction, dict) and "_raw" in doc.extraction, (
         f"expected skip-marker extraction, got {doc.extraction!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# render_first_n_pages_to_images fast path: reuse pre-rendered page images
+# ---------------------------------------------------------------------------
+def test_render_first_n_reuses_doc_pages_images(tmp_path):
+    """If doc.pages already have images_b64, they are reused (no re-render)."""
+    from idp.core.document import Document, Page
+    from idp.extract.extractor import render_first_n_pages_to_images
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    doc = Document.from_path(str(pdf))
+    # Inject pre-rendered images on two pages
+    doc.pages = [
+        Page(page_number=0, text="page 1", images_b64=["img-aa", "img-ab"]),
+        Page(page_number=1, text="page 2", images_b64=["img-ba"]),
+        Page(page_number=2, text="page 3", images_b64=[]),
+    ]
+    # n=3 -> all 3 images returned (2 from page 0 + 1 from page 1)
+    out = render_first_n_pages_to_images(doc, n=3)
+    assert out == ["img-aa", "img-ab", "img-ba"]
+
+
+def test_render_first_n_caps_at_n(tmp_path):
+    """Fast path respects the n cap (don't return more than requested)."""
+    from idp.core.document import Document, Page
+    from idp.extract.extractor import render_first_n_pages_to_images
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    doc = Document.from_path(str(pdf))
+    doc.pages = [
+        Page(page_number=0, text="p0", images_b64=["a", "b", "c", "d", "e"]),
+    ]
+    out = render_first_n_pages_to_images(doc, n=3)
+    assert out == ["a", "b", "c"]
+
+
+def test_render_first_n_returns_empty_when_pages_have_no_images(tmp_path):
+    """Fast path returns [] if pages exist but none have images_b64.
+
+    (Different from 'no pages at all' which would fall through to the
+    PDF rendering branch.)
+    """
+    from idp.core.document import Document, Page
+    from idp.extract.extractor import render_first_n_pages_to_images
+
+    pdf = tmp_path / "fake.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    doc = Document.from_path(str(pdf))
+    doc.pages = [Page(page_number=0, text="p0", images_b64=[])]
+    out = render_first_n_pages_to_images(doc, n=2)
+    assert out == []

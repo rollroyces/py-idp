@@ -130,10 +130,6 @@ class DoclingParser:
         self._converter = DocumentConverter()
 
     def parse(self, path: str | Path) -> dict[str, Any]:
-        from docling_core.types.doc.base import (
-            ImageRefMode,  # type: ignore[import-not-found]  # noqa: F401
-        )
-
         result = self._converter.convert(str(path))
         doc = result.document
         text = doc.export_to_markdown()
