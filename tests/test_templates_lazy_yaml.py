@@ -35,7 +35,7 @@ def test_load_template_without_yaml_raises_helpful_error(tmp_path) -> None:
     sys.meta_path.insert(0, _Blocker())
 
     try:
-        from idp.templates import load_template
+        load_template = tpl_mod.load_template
         with pytest.raises(ImportError) as exc_info:
             load_template(template)
         msg = str(exc_info.value)
