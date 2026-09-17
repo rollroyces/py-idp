@@ -237,8 +237,15 @@ def test_stub_ref_resolves_when_in_defs():
     }
     defs = {"Item": {"type": "object", "properties": {"name": {"type": "string"}}}}
     out = _stub(schema, defs)
-    assert "item" in out
-    assert out["item"] == {"name": ""}
+    # Be defensive about the membership check: if _stub returns a
+    # non-container (shouldn't happen for valid schemas, but could for
+    # malformed ones), the test should still describe what happened.
+    if isinstance(out, dict):
+        assert "item" in out
+        assert out["item"] == {"name": ""}
+    else:
+        # Defensive: document the unexpected shape
+        pytest.fail(f"_stub returned non-dict: {out!r}")
 
 
 def test_stub_ref_unresolvable_returns_none():

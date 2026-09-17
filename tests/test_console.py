@@ -163,8 +163,9 @@ def test_idp_util_legacy_import_still_works():
 
 def test_top_level_pretty_print_result_works():
     """idp.pretty_print_result (top-level) is exposed."""
-    import idp
-    assert idp.pretty_print_result is pretty_print_result
+    # Verify the top-level re-export matches the direct import.
+    import idp as _idp
+    assert pretty_print_result is _idp.pretty_print_result
 
 
 # ---------------------------------------------------------------------------
