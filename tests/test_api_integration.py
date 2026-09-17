@@ -213,3 +213,82 @@ def test_invalid_configuration_fails_at_startup(tmp_path, monkeypatch):
     from idp.errors import ConfigurationError
     with pytest.raises(ConfigurationError, match=r"API_PORT|integer"), TestClient(app) as c:
         c.get("/healthz")
+
+# ---------------------------------------------------------------------------
+# API key middleware (line 138: 401 missing key)
+# ---------------------------------------------------------------------------
+def test_api_key_required_returns_401_when_missing(monkeypatch, tmp_path):
+    """If API key is configured but request doesn't provide one → 401."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.config import Settings
+
+    saved = api_mod._settings
+    # Configure settings with API key required
+    monkeypatch.setenv("IDP_API_KEY", "secret-test-key-123")
+    api_mod._settings = Settings.load()
+    try:
+        with TestClient(api_mod.app) as client:
+            # /version is exempt; hit /templates (protected)
+            r = client.get("/templates")
+            assert r.status_code == 401
+            assert "missing API key" in r.text
+    finally:
+        api_mod._settings = saved
+
+
+def test_api_key_required_returns_403_when_wrong(monkeypatch, tmp_path):
+    """If wrong API key is provided → 403."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.config import Settings
+
+    saved = api_mod._settings
+    monkeypatch.setenv("IDP_API_KEY", "secret-test-key-123")
+    api_mod._settings = Settings.load()
+    try:
+        with TestClient(api_mod.app) as client:
+            r = client.get("/templates", headers={"X-API-Key": "wrong-key"})
+            assert r.status_code == 403
+    finally:
+        api_mod._settings = saved
+
+
+# ---------------------------------------------------------------------------
+# /version returns the package version
+# ---------------------------------------------------------------------------
+def test_version_endpoint_returns_package_version():
+    """GET /version returns idp.__version__."""
+    from fastapi.testclient import TestClient
+
+    import idp
+    from idp import api as api_mod
+
+    with TestClient(api_mod.app) as client:
+        r = client.get("/version")
+        assert r.status_code == 200
+        assert r.text == idp.__version__
+
+
+# ---------------------------------------------------------------------------
+# /metrics disabled → 404 (lines 438-445)
+# ---------------------------------------------------------------------------
+def test_metrics_disabled_returns_404(monkeypatch):
+    """When metrics_enabled is False, /metrics returns 404."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.config import Settings
+
+    saved = api_mod._settings
+    monkeypatch.setenv("IDP_METRICS_ENABLED", "0")
+    api_mod._settings = Settings.load()
+    try:
+        with TestClient(api_mod.app) as client:
+            r = client.get("/metrics")
+            assert r.status_code == 404
+            assert "metrics disabled" in r.text
+    finally:
+        api_mod._settings = saved

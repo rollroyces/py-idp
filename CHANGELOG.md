@@ -5,6 +5,52 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.7] — 2026-09-17 — coverage push to 90%, HITL app smoke tests
+
+### Fixed
+
+* **`_stub()` real bug** — the previous audit's defensive guard against
+  malformed schemas (e.g. `{"type": "object", "properties": 0}`) was
+  bypassed by the `t == "object"` clause. Result: assertion failure
+  in normal mode, `AttributeError` under `python -O` (asserts stripped).
+  Combined the predicates so the object branch only runs when
+  `properties` is actually a dict. **Verified under `-O`.**
+
+### Added
+
+* **`idp.console` (public path for `pretty_print_result`)** — moved
+  out of `idp._util` (private-by-convention) into a new public module
+  with a real docstring and type hints. Old `idp._util` import keeps
+  working (re-export shim). `idp.pretty_print_result` exposed at top
+  level.
+* **`tests/test_hitl_app_smoke.py`** — 6 tests using Streamlit's
+  `AppTest` harness to smoke-test the HITL UI module
+  (`hitl/app.py` 0% → 48%). The data logic is already 100% via
+  `tests/test_hitl_review.py`.
+
+### Changed
+
+* Updated 6 example scripts to import `pretty_print_result` from
+  `idp.console` (the new public path).
+* README + CHANGELOG + pyproject version bumps 0.3.6 → 0.3.7.
+
+### Tests
+
+* 738 → 792 (+54 new). Total coverage 88% → 90%.
+
+Per-file coverage gains:
+
+| file | before | after | delta |
+|------|--------|-------|-------|
+| eval/metrics.py | 76% | 90% | +14 |
+| classify/classifier.py | 84% | 100% | +16 |
+| rl/online.py | 85% | 91% | +6 |
+| api.py | 92% | 93% | +1 |
+| storage/sql.py | 87% | 88% | +1 |
+| pipeline/pipeline.py | 92% | 99% | +7 |
+| hitl/app.py | 0% | 48% | +48 |
+| cli_sources.py | 93% | 98% | +5 (PR #24) |
+
 ## [0.3.6] — 2026-09-16 — `idp batch` CLI, batch module home
 
 ### Added

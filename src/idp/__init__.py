@@ -35,7 +35,7 @@ from idp.templates import Template, TemplateRegistry, load_template
 # pyproject.toml is the source of truth (used by `python -m build` and
 # trusted-publisher publish); this __version__ is mirrored here so users
 # can introspect it at runtime via `import idp; idp.__version__`.
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 __all__ = [
     "BatchItemResult",
     "Block",

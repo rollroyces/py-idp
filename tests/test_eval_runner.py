@@ -187,3 +187,62 @@ def test_run_dataset_against_bundled_invoices() -> None:
     # mock backend should always produce valid schema output
     assert res["rows"][0]["schema_valid_rate"] >= 0.0
     assert res["rows"][0]["schema_valid_rate"] <= 1.0
+
+# ---------------------------------------------------------------------------
+# _norm: edge cases for dict/list (lines 36-38)
+# ---------------------------------------------------------------------------
+def test_norm_recurses_into_dicts():
+    """_norm normalizes dict values recursively (keys unchanged)."""
+    from idp.eval.metrics import _norm
+    out = _norm({"name": "  ACME  ", "amount": 1.001})
+    assert out == {"name": "acme", "amount": 1.0}
+
+
+def test_norm_recurses_into_lists():
+    """_norm normalizes list elements recursively."""
+    from idp.eval.metrics import _norm
+    out = _norm(["  Hello  ", 1.005, 42])
+    assert out == ["hello", 1.0, 42]
+
+
+def test_field_match_handles_dict_values():
+    """field_match compares dict values via _norm (recurses)."""
+    from idp.eval.metrics import field_match
+    predicted = {"vendor": {"name": "  ACME  "}}
+    gold = {"vendor": {"name": "acme"}}
+    assert field_match(predicted, gold) == {"vendor": True}
+
+
+def test_field_scores_handles_extra_keys_in_predicted():
+    """Extra predicted keys are dropped by field_match (returned bool only for gold fields)."""
+    from idp.eval.metrics import field_match, field_scores
+
+    # Doc 1: predicted matches gold on "vendor_name"; extra "tax_id" is dropped
+    d1 = field_match(
+        predicted={"vendor_name": "Acme", "tax_id": "123"},
+        gold={"vendor_name": "Acme"},
+    )
+    # tax_id doesn't appear in d1 because gold has no tax_id
+    assert "tax_id" not in d1
+    d2 = field_match(
+        predicted={"vendor_name": "Wrong"},
+        gold={"vendor_name": "Acme"},
+    )
+    scores = field_scores([d1, d2])
+    # TP=1 (vendor_name match in doc 1), FN=1 (vendor_name fail in doc 2)
+    # FP=0 because field_match only emits gold fields
+    assert scores["precision"] == pytest.approx(1.0)   # 1 TP / (1 TP + 0 FP)
+    assert scores["recall"] == pytest.approx(1 / 2)    # 1 TP / (1 TP + 1 FN)
+    assert scores["n"] == 2
+
+
+def test_field_scores_empty():
+    """Empty per_doc returns zeros (line 53)."""
+    from idp.eval.metrics import field_scores
+    assert field_scores([]) == {"precision": 0.0, "recall": 0.0, "f1": 0.0, "n": 0}
+
+
+def test_schema_valid_returns_zero_for_empty_input():
+    """schema_valid with empty extractions returns 0.0 (no division by zero)."""
+    from idp.eval.metrics import schema_valid
+    assert schema_valid([], schema_validator=lambda x: True) == 0.0
