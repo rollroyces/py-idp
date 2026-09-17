@@ -354,13 +354,24 @@ class NanonetsVLBackend(Backend):
 
     def _preprocess(self, image: Any) -> Any:
         """Resize longest side to ``max_image_side``. PIL Image in/out."""
+        from PIL import Image
         w, h = image.size
         longest = max(w, h)
         if longest <= self.max_image_side:
             return image
         scale = self.max_image_side / longest
         new_size = (max(1, int(w * scale)), max(1, int(h * scale)))
-        return image.resize(new_size, image.LANCZOS)
+        # PIL 10+ moved LANCZOS to Image.Resampling. Older PILs have it
+        # as Image.LANCZOS (a top-level constant on the Image module).
+        # We try both, falling back to BICUBIC if neither exists.
+        try:
+            resampling = Image.Resampling.LANCZOS  # type: ignore[attr-defined]
+        except AttributeError:
+            try:
+                resampling = Image.LANCZOS  # type: ignore[attr-defined]
+            except AttributeError:
+                resampling = Image.BICUBIC  # type: ignore[attr-defined]
+        return image.resize(new_size, resampling)
 
     def _generate_text_only(self, text: str) -> str:
         """Generate from text only (no images). Lower accuracy — fallback path."""

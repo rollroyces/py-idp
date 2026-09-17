@@ -37,7 +37,9 @@ jobs:
           pip install mypy
           mypy src/idp/
       - name: Test
-        run: pytest -v
+        run: |
+          pip install pytest-cov
+          pytest -v --cov=idp --cov-report=term-missing --cov-fail-under=90
       - name: Eval smoke
         run: |
           idp eval --dataset src/idp/eval/datasets/invoices \

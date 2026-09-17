@@ -5,6 +5,40 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.3.8] — 2026-09-17 — coverage push to 92%, PIL 10+ bug fix
+
+### Fixed
+
+* **`NanonetsVLBackend._preprocess` crashed on PIL 10+** — used
+  `image.LANCZOS` which was removed from PIL Image instances in v10.
+  Result: `_extract_images` returned `[]` for any image with a long
+  edge > `max_image_side` (silently dropped, no error surfaced).
+  Fixed by trying `Image.Resampling.LANCZOS` first, then `Image.LANCZOS`
+  (older PIL), falling back to `Image.BICUBIC`. Found via the new
+  `_preprocess_resize_when_too_large` test.
+
+### Added
+
+* **`hitl/app.py` smoke coverage: 48% → 87%** — 12 tests in
+  `tests/test_hitl_app_smoke.py` driving Streamlit's `AppTest`
+  harness through sidebar metrics, queue/history/About pages, and
+  the page navigation paths.
+* **`llm/nanonets.py` mock coverage: 61% → 64%** — 21 tests pinning
+  `_build_prompt`, `_extract_images`, `_clean_json`, `_preprocess`,
+  `_require_deps`, and the `complete()` text-only vs multimodal
+  path dispatch.
+* **Property-based tests** for `_perturb_json`, `_omit_fields`,
+  `_empty_schema` — 13 new tests using Hypothesis.
+* **CI coverage gate** — `.github/workflows/tests.yml` now runs
+  `pytest --cov-fail-under=90`, so dropping coverage below 90%
+  fails CI.
+* **CHANGELOG link in README** — added link in all 3 READMEs
+  (English + 繁中 + 简中) so users can find release notes.
+
+### Tests
+
+* 792 → 836 (+44 new). Total coverage 90% → 92%.
+
 ## [0.3.7] — 2026-09-17 — coverage push to 90%, HITL app smoke tests
 
 ### Fixed

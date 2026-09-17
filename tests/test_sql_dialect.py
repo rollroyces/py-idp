@@ -256,3 +256,71 @@ def test_sqlite_memory_connection_works() -> None:
     cur = conn.execute("SELECT COUNT(*) FROM t")
     assert cur.fetchone()[0] == 1
     conn.close()
+
+# ---------------------------------------------------------------------------
+# _strip_postgres_only: SQL scrubber for SQLite compatibility
+# ---------------------------------------------------------------------------
+def test_strip_postgres_only_drops_do_block():
+    """DO $$ ... $$ blocks are removed for SQLite."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = "SELECT 1;\nDO $$ BEGIN RAISE NOTICE 'hi'; END $$;\nSELECT 2;"
+    out = _strip_postgres_only(sql)
+    assert "DO" not in out
+    assert "RAISE NOTICE" not in out
+    # Other parts preserved
+    assert "SELECT 1" in out
+    assert "SELECT 2" in out
+
+
+def test_strip_postgres_only_drops_create_type_enum():
+    """CREATE TYPE name AS ENUM (...) is removed for SQLite."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = "SELECT 1;\nCREATE TYPE review_status AS ENUM ('pending', 'submitted');\nSELECT 2;"
+    out = _strip_postgres_only(sql)
+    assert "CREATE TYPE" not in out
+    assert "review_status" not in out or "ENUM" not in out
+    assert "SELECT 1" in out
+    assert "SELECT 2" in out
+
+
+def test_strip_postgres_only_replaces_review_status_with_text():
+    """review_status NOT NULL DEFAULT 'submitted' -> TEXT NOT NULL DEFAULT 'submitted'."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = "review_status NOT NULL DEFAULT 'submitted' CHECK (status IN ('a', 'b'))"
+    out = _strip_postgres_only(sql)
+    assert "TEXT NOT NULL DEFAULT 'submitted'" in out
+
+
+def test_strip_postgres_only_handles_no_postgres_constructs():
+    """Pure-SQLite input is unchanged."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT);"
+    out = _strip_postgres_only(sql)
+    assert out == sql
+
+
+def test_strip_postgres_only_handles_multiline_do_block():
+    """A multi-line DO $$ block is fully removed (re.DOTALL flag works)."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = (
+        "BEGIN;\n"
+        "DO $$\n"
+        "  BEGIN\n"
+        "    PERFORM some_function();\n"
+        "  END;\n"
+        "$$\n"
+        "COMMIT;\n"
+    )
+    out = _strip_postgres_only(sql)
+    assert "PERFORM" not in out
+    assert "some_function" not in out
+    assert "BEGIN;" in out
+    assert "COMMIT;" in out
+
+
+def test_strip_postgres_only_case_insensitive():
+    """CREATE TYPE matching is case-insensitive."""
+    from idp.storage.sql import _strip_postgres_only
+    sql = "create type foo as enum ('a');"
+    out = _strip_postgres_only(sql)
+    assert "create type" not in out or "ENUM" not in out

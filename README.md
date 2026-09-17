@@ -73,6 +73,8 @@ Combine: `pip install py-idp[docling,anthropic,eval,dev]`.
 
 ---
 
+See [CHANGELOG.md](https://github.com/rollroyces/py-idp/blob/main/CHANGELOG.md) for release notes.
+
 ## 30-second tour
 
 ```python
@@ -1087,7 +1089,7 @@ python -m examples.batch        # process_batch() helper for Databricks-style ba
 python -m examples.discover_schema_sample  # AI-driven schema discovery (6 scenarios, generates a real PDF)
 ```
 
-`import idp; idp.__version__` → `0.3.7`.
+`import idp; idp.__version__` → `0.3.8`.
 
 ---
 

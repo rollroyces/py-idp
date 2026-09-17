@@ -279,3 +279,129 @@ def test_stub_allof_merges_branches():
     assert "b" in out
     # If a future change merges properties properly, this test should
     # also accept "a" in out. Pinning current behavior for now.
+
+
+# ---------------------------------------------------------------------------
+# _perturb_json: schema-fuzzing simulator (line 554)
+# ---------------------------------------------------------------------------
+@settings(max_examples=100)
+@given(st.dictionaries(st.text(min_size=1), st.text(), max_size=5))
+def test_perturb_json_returns_valid_json_or_empty_dict(schema):
+    """_perturb_json output is always parseable JSON (never crashes)."""
+    from idp.llm.backend import _perturb_json
+    schema_str = json.dumps(schema)
+    out = _perturb_json(schema_str)
+    # Output should be parseable
+    parsed = json.loads(out)
+    assert isinstance(parsed, dict)
+
+
+def test_perturb_json_with_empty_schema():
+    """Empty schema string still returns parseable JSON."""
+    from idp.llm.backend import _perturb_json
+    out = _perturb_json("{}")
+    parsed = json.loads(out)
+    assert parsed == {}
+
+
+def test_perturb_json_with_null_base():
+    """If _empty_schema returns 'null' literal, _perturb_json handles it."""
+    from idp.llm.backend import _perturb_json
+    # A schema with no fields to stub would make _empty_schema return "null"
+    out = _perturb_json("{}")  # Empty schema -> empty stub -> {}
+    # Should be a dict (possibly empty)
+    assert isinstance(json.loads(out), dict)
+
+
+# ---------------------------------------------------------------------------
+# _omit_fields: drop-half-the-leaves simulator (line 574)
+# ---------------------------------------------------------------------------
+@settings(max_examples=100)
+@given(st.dictionaries(st.text(min_size=1), st.text(), max_size=5))
+def test_omit_fields_returns_valid_json_or_empty(schema):
+    """_omit_fields output is always parseable JSON."""
+    from idp.llm.backend import _omit_fields
+    schema_str = json.dumps(schema)
+    out = _omit_fields(schema_str)
+    parsed = json.loads(out)
+    assert isinstance(parsed, dict)
+
+
+def test_omit_fields_drops_half_the_keys():
+    """_omit_fields should set every-other key to None (low-confidence sim)."""
+    from idp.llm.backend import _omit_fields
+    schema = {"a": "x", "b": "x", "c": "x", "d": "x"}  # 4 keys
+    out = json.loads(_omit_fields(json.dumps(schema)))
+    # Two keys should be None, two should be "x" (every-other pattern)
+    none_count = sum(1 for v in out.values() if v is None)
+    x_count = sum(1 for v in out.values() if v == "x")
+    assert none_count == 2
+    assert x_count == 2
+
+
+def test_omit_fields_with_empty_schema():
+    """Empty schema returns parseable empty dict."""
+    from idp.llm.backend import _omit_fields
+    out = _omit_fields("{}")
+    assert json.loads(out) == {}
+
+
+# ---------------------------------------------------------------------------
+# _empty_schema: stub a JSON schema dict to default values (line 447)
+# ---------------------------------------------------------------------------
+@settings(max_examples=100)
+@given(st.recursive(
+    st.one_of(
+        st.none(),
+        st.booleans(),
+        st.integers(),
+        st.floats(allow_nan=False),
+        st.text(max_size=10),
+    ),
+    lambda children: st.one_of(
+        st.lists(children, max_size=3),
+        st.dictionaries(st.text(min_size=1), children, max_size=3),
+    ),
+    max_leaves=15,
+))
+def test_empty_schema_never_crashes(schema):
+    """_empty_schema handles any nested JSON-like input without crashing."""
+    from idp.llm.backend import _empty_schema
+    schema_str = json.dumps(schema)
+    out = _empty_schema(schema_str)
+    # Output is a string (possibly "null" for empty input)
+    assert isinstance(out, str)
+    # If output is non-empty, it should parse as JSON
+    if out and out != "null":
+        parsed = json.loads(out)
+        assert parsed is not None  # Could be any JSON value
+
+
+def test_empty_schema_for_object_with_properties():
+    """An object schema with properties → stubbed dict with default-typed fields."""
+    from idp.llm.backend import _empty_schema
+    schema = json.dumps({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "amount": {"type": "number"},
+            "is_paid": {"type": "boolean"},
+        },
+    })
+    out = json.loads(_empty_schema(schema))
+    assert out == {"name": "", "amount": 0.0, "is_paid": False}
+
+
+def test_empty_schema_for_array():
+    """An array schema → list with one stubbed item."""
+    from idp.llm.backend import _empty_schema
+    schema = json.dumps({"type": "array", "items": {"type": "string"}})
+    out = json.loads(_empty_schema(schema))
+    assert out == [""]
+
+
+def test_empty_schema_handles_invalid_json():
+    """Invalid JSON input is gracefully handled (returns 'null' or '{}')."""
+    from idp.llm.backend import _empty_schema
+    out = _empty_schema("not json at all")
+    assert out in ("null", "{}")
