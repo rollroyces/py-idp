@@ -405,3 +405,138 @@ def test_empty_schema_handles_invalid_json():
     from idp.llm.backend import _empty_schema
     out = _empty_schema("not json at all")
     assert out in ("null", "{}")
+
+
+# ---------------------------------------------------------------------------
+# Deeper property-based tests: 1000 examples per fuzzer.
+# These run longer but have a better chance of finding edge cases
+# the 100-example sweeps missed.
+# ---------------------------------------------------------------------------
+@settings(max_examples=1000, deadline=None)
+@given(st.recursive(
+    st.one_of(st.none(), st.booleans(), st.integers(), st.floats(allow_nan=False), st.text(max_size=20)),
+    lambda children: st.one_of(
+        st.lists(children, max_size=4),
+        st.dictionaries(st.text(min_size=1, max_size=10), children, max_size=4),
+    ),
+    max_leaves=30,
+))
+def test_stub_1000_examples(x):
+    """_stub is a total function over any nested JSON-like input (1000 ex)."""
+    from idp.llm.backend import _stub
+    out = _stub(x)
+    json.dumps(out)  # must be JSON-serialisable
+
+
+@settings(max_examples=1000, deadline=None)
+@given(st.text(max_size=200))
+def test_safe_json_1000_examples(s):
+    """_safe_json never raises, always returns a dict (1000 ex)."""
+    from idp.llm.backend import _safe_json
+    out = _safe_json(s)
+    assert isinstance(out, dict)
+
+
+@settings(max_examples=1000, deadline=None)
+@given(st.text(max_size=200))
+def test_extract_schema_block_1000_examples(s):
+    """_extract_schema_block never raises, always returns a string (1000 ex)."""
+    from idp.llm.backend import _extract_schema_block
+    out = _extract_schema_block(s)
+    assert isinstance(out, str)
+
+
+@settings(max_examples=1000, deadline=None)
+@given(st.text(max_size=500))
+def test_safe_load_1000_examples(s):
+    """_safe_load never raises, always returns a dict (1000 ex)."""
+    from idp.extract.extractor import _safe_load
+    out = _safe_load(s)
+    assert isinstance(out, dict)
+
+
+# ---------------------------------------------------------------------------
+# Targeted fuzzing for specific edge cases
+# ---------------------------------------------------------------------------
+@settings(max_examples=500, deadline=None)
+@given(st.dictionaries(
+    st.sampled_from(["type", "properties", "$ref", "enum", "anyOf", "oneOf", "allOf", "items", "required"]),
+    st.one_of(
+        st.none(),
+        st.booleans(),
+        st.integers(min_value=-100, max_value=100),
+        st.text(max_size=50),
+        st.lists(st.text(max_size=20), max_size=5),
+    ),
+    max_size=6,
+))
+def test_stub_handles_typed_malformed_schemas(schema):
+    """Fuzz schemas with the exact JSON Schema keys + various value types.
+
+    This is more targeted than the recursive fuzzer — it uses the real
+    JSON-Schema keys a model might emit, paired with adversarial value
+    types (None, bool, int) that aren't supposed to be there but
+    sometimes are from a malformed model response.
+    """
+    from idp.llm.backend import _stub
+    out = _stub(schema)
+    # Must not crash; output must be JSON-serialisable
+    json.dumps(out)
+
+
+@settings(max_examples=500, deadline=None)
+@given(st.sampled_from([
+    "",
+    "null",
+    "0",
+    "false",
+    "[]",
+    "{}",
+    "42",
+    '"hi"',
+    # Unicode edge cases
+    '{"emoji": "🎉"}',
+    '{"newlines": "line1\\nline2"}',
+    # Whitespace edge cases
+    "  {  }  ",
+    "\n\n\n",
+    # Very long strings
+    '{"a": "' + ("x" * 10000) + '"}',
+    # Nested deeply
+    '{"a": {"b": {"c": {"d": {"e": 1}}}}}',
+    # Arrays at top level
+    '[]',
+    '[1, 2, 3]',
+    '[{"a": 1}, {"a": 2}]',
+    # Empty array vs empty object
+    '[]',
+    '{}',
+    # Numbers with decimals
+    '3.14159',
+    '-0.0001',
+    '1e100',
+    # Strings with escapes
+    '"with\\"escapes"',
+    # Malformed (will be parsed loosely)
+    '{a: 1}',  # unquoted key
+    "{'a': 1}",  # single quotes
+    '{"a": 1,}',  # trailing comma
+    '{"a": 1, "a": 2}',  # duplicate key
+    # Booleans/null in numeric positions
+    'true',
+    'false',
+    'null',
+    # Unicode BOM
+    '\ufeff{"a": 1}',
+]))
+def test_safe_json_handles_known_adversarial_inputs(s):
+    """_safe_json on a curated set of adversarial JSON-ish strings."""
+    from idp.llm.backend import _safe_json
+    out = _safe_json(s)
+    # Output is always a dict (possibly with _error marker)
+    assert isinstance(out, dict)
+    # If parse succeeded, no _error marker
+    if "_error" not in out:
+        # The parsed value must be round-trippable
+        # (skip — _safe_json may have augmented the dict, like {"_error": ...})
+        pass

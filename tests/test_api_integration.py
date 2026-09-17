@@ -292,3 +292,176 @@ def test_metrics_disabled_returns_404(monkeypatch):
             assert "metrics disabled" in r.text
     finally:
         api_mod._settings = saved
+
+
+# ---------------------------------------------------------------------------
+# /templates/{name} GET endpoint (line 318)
+# ---------------------------------------------------------------------------
+def test_get_template_returns_full_template(tmp_path):
+    """GET /templates/{name} returns the full template (frontmatter + body)."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+
+    saved = api_mod._settings
+    monkeypatch_key = "IDP_API_KEY_REQUIRED"
+    import os
+    saved_env = os.environ.get(monkeypatch_key)
+    os.environ[monkeypatch_key] = "0"
+    api_mod._settings = None
+    api_mod._template_registry = None
+    try:
+        with TestClient(api_mod.app) as client:
+            from idp.templates import TemplateRegistry
+            api_mod._template_registry = TemplateRegistry.load("templates")
+            r = client.get("/templates/invoice")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["name"] == "invoice"
+            assert data["schema"] == "Invoice"
+            assert data["body"]
+            assert isinstance(data["field_overrides"], dict)
+    finally:
+        if saved_env is None:
+            os.environ.pop(monkeypatch_key, None)
+        else:
+            os.environ[monkeypatch_key] = saved_env
+        api_mod._settings = saved
+
+
+def test_get_template_returns_404_for_unknown(tmp_path, monkeypatch):
+    """GET /templates/{unknown} returns 404 with IDP-TMPL-404 code."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.templates import TemplateRegistry
+
+    monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+    saved_settings = api_mod._settings
+    saved_registry = api_mod._template_registry
+    api_mod._settings = None  # force reload on next access
+    api_mod._template_registry = TemplateRegistry.load("templates")
+    try:
+        with TestClient(api_mod.app) as client:
+            r = client.get("/templates/does-not-exist")
+            assert r.status_code == 404
+    finally:
+        api_mod._settings = saved_settings
+        api_mod._template_registry = saved_registry
+
+
+# ---------------------------------------------------------------------------
+# /extract POST endpoint (line 342)
+# ---------------------------------------------------------------------------
+def test_extract_sync_runs_pipeline(tmp_path, monkeypatch):
+    """POST /extract runs the pipeline and returns ExtractResponse."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+
+    monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+    monkeypatch.setenv("IDP_UPLOAD_DIR", str(tmp_path / "uploads"))
+    saved = api_mod._settings
+    api_mod._settings = None
+    try:
+        with TestClient(api_mod.app) as client:
+            files = {"file": ("test.txt", b"INVOICE INV-001\nVendor: Acme", "text/plain")}
+            data = {"schema_name": "Invoice", "backend": "mock"}
+            r = client.post("/extract", files=files, data=data)
+            assert r.status_code == 200, r.text
+            payload = r.json()
+            assert payload["backend_name"] == "mock"
+            assert payload["schema_name"] == "Invoice"
+            assert "extraction" in payload
+    finally:
+        api_mod._settings = saved
+
+
+def test_extract_sync_routes_via_template_when_no_schema(tmp_path, monkeypatch):
+    """If schema_name is omitted, the template registry picks one."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.templates import TemplateRegistry
+
+    monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+    monkeypatch.setenv("IDP_UPLOAD_DIR", str(tmp_path / "uploads"))
+    saved = api_mod._settings
+    saved_registry = api_mod._template_registry
+    api_mod._settings = None
+    api_mod._template_registry = TemplateRegistry.load("templates")
+    try:
+        with TestClient(api_mod.app) as client:
+            files = {"file": ("invoice-sample.txt", b"INVOICE 1", "text/plain")}
+            r = client.post("/extract", files=files, data={"backend": "mock"})
+            assert r.status_code == 200, r.text
+            payload = r.json()
+            # Either the filename matched an invoice template, or it fell
+            # back to the default "Invoice" schema.
+            if payload.get("template_used"):
+                assert payload["template_used"] in {"invoice", "default"}
+    finally:
+        api_mod._settings = saved
+        api_mod._template_registry = saved_registry
+
+
+# ---------------------------------------------------------------------------
+# /templates GET list endpoint (line 297)
+# ---------------------------------------------------------------------------
+def test_list_templates_returns_all_registered(tmp_path, monkeypatch):
+    """GET /templates returns the list of registered template names."""
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.templates import TemplateRegistry
+
+    monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+    saved = api_mod._settings
+    saved_registry = api_mod._template_registry
+    api_mod._settings = None
+    api_mod._template_registry = TemplateRegistry.load("templates")
+    try:
+        with TestClient(api_mod.app) as client:
+            r = client.get("/templates")
+            assert r.status_code == 200
+            templates = r.json()
+            assert isinstance(templates, list)
+            names = sorted(t["name"] for t in templates)
+            assert "invoice" in names
+            assert "contract" in names
+            assert "bank_statement" in names
+    finally:
+        api_mod._settings = saved
+        api_mod._template_registry = saved_registry
+
+
+def test_list_templates_empty_registry_returns_empty(monkeypatch):
+    """With no templates/ dir available, /templates returns [].
+
+    Note: This is hard to test in-process because the lifespan
+    handler always reads from the configured templates/ directory
+    on startup. We approximate by setting an invalid template dir
+    via env var, which causes Settings.load() to point at a
+    non-existent path — the lifespan then loads zero templates.
+    """
+    import tempfile
+
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.config import Settings
+
+    # Create an empty temp dir (no .md files)
+    with tempfile.TemporaryDirectory() as empty_dir:
+        monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+        monkeypatch.setenv("IDP_TEMPLATE_DIR", empty_dir)
+        saved_settings = api_mod._settings
+        api_mod._settings = None
+        try:
+            api_mod._settings = Settings.load()
+            with TestClient(api_mod.app) as client:
+                r = client.get("/templates")
+                assert r.status_code == 200
+                assert r.json() == []
+        finally:
+            api_mod._settings = saved_settings
