@@ -235,3 +235,63 @@ def test_sqlite_url_with_disk_file_works(tmp_path):
     assert s.get("r1") is not None
     s2 = SqlStorage(f"sqlite:///{tmp_path / 'mem.db'}")
     assert s2.get("r1") is not None
+
+
+# ---------------------------------------------------------------------------
+# Edge cases: DB URL parsing (lines 51-52, 69)
+# ---------------------------------------------------------------------------
+def test_parse_url_unsupported_scheme_raises():
+    """An unrecognized DB URL raises ValueError."""
+    from idp.storage.sql import _parse_url
+    with pytest.raises(ValueError, match="unsupported DB URL"):
+        _parse_url("mysql://user:pass@host/db")
+
+
+def test_parse_url_postgres_scheme():
+    from idp.storage.sql import _parse_url
+    dialect, target = _parse_url("postgresql://user:pass@host/db")
+    assert dialect == "postgres"
+    assert target == "postgresql://user:pass@host/db"
+
+
+def test_parse_url_postgres_legacy_alias():
+    from idp.storage.sql import _parse_url
+    dialect, target = _parse_url("postgres://user:pass@host/db")
+    assert dialect == "postgres"
+
+
+# ---------------------------------------------------------------------------
+# _json_dump / _json_load (lines 86, 100-102)
+# ---------------------------------------------------------------------------
+def test_json_dump_encodes_none_as_json_literal():
+    """None becomes the JSON string 'null' (so it can be stored in NOT NULL TEXT)."""
+    from idp.storage.sql import _json_dump
+    assert _json_dump(None) == "null"
+
+
+def test_json_dump_serialises_via_default_str():
+    """Non-JSON-serialisable values (e.g. datetime) are coerced via default=str."""
+    from datetime import datetime
+
+    from idp.storage.sql import _json_dump
+    out = _json_dump(datetime(2026, 9, 16))
+    assert "2026-09-16" in out
+
+
+def test_json_load_handles_already_parsed():
+    """_json_load returns dict/list as-is."""
+    from idp.storage.sql import _json_load
+    d = {"a": 1}
+    assert _json_load(d) is d  # same object
+
+
+def test_json_load_parses_string():
+    """_json_load parses string JSON."""
+    from idp.storage.sql import _json_load
+    assert _json_load('{"a": 1}') == {"a": 1}
+    assert _json_load("[1, 2, 3]") == [1, 2, 3]
+
+
+def test_json_load_returns_none_for_none():
+    from idp.storage.sql import _json_load
+    assert _json_load(None) is None
