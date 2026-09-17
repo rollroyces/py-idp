@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pytest
 
+import idp.rl.online  # noqa: F401  # module-level import for `idp.rl.online.json` access
 from idp.rl.online import PolicyCache
 from idp.rl.policy import PolicyConfig
 from idp.storage.store import InMemoryStorage, StoredResult
-
-import idp.rl.online  # noqa: F401  # module-level import for `idp.rl.online.json` access
 
 
 def _reviewed_stored_result(rid: str = "r1", vendor_correct: bool = False) -> StoredResult:
