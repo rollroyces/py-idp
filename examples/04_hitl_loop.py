@@ -39,7 +39,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from idp._util import pretty_print_result
+from idp.console import pretty_print_result
 from idp.core.document import Document
 from idp.core.schemas import Invoice
 from idp.llm import get_backend

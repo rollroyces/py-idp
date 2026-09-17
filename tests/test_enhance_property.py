@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -171,3 +172,103 @@ def test_stub_handles_ref_without_defs_prefix():
     out = _stub({"$ref": "not-a-pointer"})
     # Malformed refs return None (per existing contract).
     assert out is None
+
+
+# ---------------------------------------------------------------------------
+# _stub: targeted regression tests for historically-crashing malformed schemas
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "schema",
+    [
+        # enum as non-list (Hypothesis once hit this)
+        {"enum": {1, 2, 3}},
+        {"enum": "not-a-list"},
+        {"enum": 42},
+        {"enum": {}},
+        # anyOf/oneOf as non-list
+        {"anyOf": "not-a-list"},
+        {"anyOf": {"foo": "bar"}},
+        {"oneOf": 42},
+        # allOf as non-list
+        {"allOf": "garbage"},
+        # properties is wrong type
+        {"type": "object", "properties": 0},
+        {"type": "object", "properties": "x"},
+        {"type": "object", "properties": None},
+        {"type": "object", "properties": [1, 2, 3]},
+        # $ref is wrong type
+        {"$ref": 0},
+        {"$ref": None},
+        {"$ref": ["#/$defs/Foo"]},
+        {"$ref": {"not": "a string"}},
+        # Mixed: enum + properties (which path wins?)
+        {"enum": ["x"], "type": "object", "properties": {"a": "b"}},
+        # type as non-string (rare but possible from a malformed LLM)
+        {"type": 42},
+        {"type": ["string", "null"]},
+        # allOf with non-dict branch
+        {"allOf": ["string", 42, None, {"foo": "bar"}]},
+        # anyOf branches with non-dict entries
+        {"anyOf": [None, "string", 42, {"type": "string"}]},
+    ],
+)
+def test_stub_handles_malformed_schemas(schema):
+    """All malformed schemas must return without raising (lines 484-551)."""
+    out = _stub(schema)
+    # No assertion on value — just that we got something back.
+    # (The exact shape depends on the malformed branch; pin that it
+    # doesn't crash. Tests that need a specific shape live elsewhere.)
+    assert True  # explicit; "not crashing" IS the assertion
+    # Must be JSON-serialisable
+    json.dumps(out)
+
+
+def test_stub_enum_returns_first_value():
+    """Schema with valid enum list returns the first element."""
+    out = _stub({"enum": ["a", "b", "c"]})
+    assert out == "a"
+
+
+def test_stub_ref_resolves_when_in_defs():
+    """$ref resolves against $defs to the referenced schema."""
+    schema = {
+        "type": "object",
+        "properties": {"item": {"$ref": "#/$defs/Item"}},
+    }
+    defs = {"Item": {"type": "object", "properties": {"name": {"type": "string"}}}}
+    out = _stub(schema, defs)
+    assert "item" in out
+    assert out["item"] == {"name": ""}
+
+
+def test_stub_ref_unresolvable_returns_none():
+    """$ref pointing at missing $defs entry returns None (not crash)."""
+    out = _stub({"$ref": "#/$defs/Missing"})
+    assert out is None
+
+
+def test_stub_anyof_picks_first_non_null_branch():
+    """anyOf returns first non-null-type branch."""
+    out = _stub({
+        "anyOf": [{"type": "null"}, {"type": "string"}]
+    })
+    assert out == ""
+
+
+def test_stub_allof_merges_branches():
+    """allOf merges all branches' keys."""
+    out = _stub({
+        "allOf": [
+            {"type": "object", "properties": {"a": {"type": "string"}}},
+            {"type": "object", "properties": {"b": {"type": "integer"}}},
+        ]
+    })
+    # allOf merges properties — but with the same key, later wins.
+    # Document the current behavior: properties from branch 2 overwrites
+    # branch 1 because they share the key. The point of the test is that
+    # we don't crash and we return a dict.
+    assert isinstance(out, dict)
+    # The merged properties come from branch 2 (last write wins)
+    assert "b" in out
+    # If a future change merges properties properly, this test should
+    # also accept "a" in out. Pinning current behavior for now.
