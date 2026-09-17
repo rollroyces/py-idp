@@ -26,7 +26,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass
@@ -527,10 +527,12 @@ def _stub(
     # None. Coerce safely so we don't crash on garbage.
     properties = schema.get("properties")
     has_object_props = isinstance(properties, dict)
-    if t == "object" or (t is None and has_object_props):
-        # properties is dict here; mypy needs the assertion
-        assert isinstance(properties, dict)
-        return {k: _stub(v, defs) for k, v in properties.items()}
+    # Even if t == "object", properties may still be missing/wrong-type
+    # (e.g. {"type": "object", "properties": 0}). Guard with has_object_props
+    # BEFORE entering the object branch.
+    if (t == "object" or (t is None and has_object_props)) and has_object_props:
+        properties_dict = cast(dict[str, Any], properties)
+        return {k: _stub(v, defs) for k, v in properties_dict.items()}
     if t == "array":
         return [_stub(schema.get("items", {}), defs)]
     if t == "string":
@@ -542,8 +544,8 @@ def _stub(
     if t == "null":
         return None
     if has_object_props:
-        assert isinstance(properties, dict)
-        return {k: _stub(v, defs) for k, v in properties.items()}
+        properties_dict = cast(dict[str, Any], properties)
+        return {k: _stub(v, defs) for k, v in properties_dict.items()}
     # Malformed: no recognizable type, properties not a dict. Return
     # the raw schema (caller may have already extracted defaults from
     # the dict). This preserves test contracts like "keys preserved for

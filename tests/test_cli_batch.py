@@ -158,3 +158,45 @@ def test_batch_no_sources_exits_1(tmp_path: Path) -> None:
     )
     assert r.exit_code == 1
     assert "no documents found" in r.stdout
+
+# ---------------------------------------------------------------------------
+# cli_sources: edge cases (lines 63, 73, 90)
+# ---------------------------------------------------------------------------
+def test_at_file_is_directory_raises_not_a_directory(tmp_path):
+    """@file pointing at a directory raises NotADirectoryError."""
+    dir_as_file = tmp_path / "actually_a_dir"
+    dir_as_file.mkdir()
+    with pytest.raises(NotADirectoryError):
+        collect_paths([f"@{dir_as_file}"])
+
+
+def test_at_file_relative_paths_resolve_against_list_file(tmp_path):
+    """Inside @file, relative paths resolve against the list file's dir."""
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "a.pdf").write_text("")
+    list_file = tmp_path / "list.txt"
+    list_file.write_text("sub/a.pdf\n")  # relative path
+
+    out = collect_paths([f"@{list_file}"])
+    assert len(out) == 1
+    assert out[0].resolve() == (sub / "a.pdf").resolve()
+
+
+def test_collect_paths_handles_paths_with_comments_and_blanks(tmp_path):
+    """@file with comments and blank lines: only valid paths are returned."""
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "a.pdf").write_text("")
+    (sub / "b.pdf").write_text("")
+    list_file = tmp_path / "list.txt"
+    list_file.write_text(
+        f"# This is a comment\n"
+        f"\n"
+        f"{sub}/a.pdf\n"
+        f"# Another comment\n"
+        f"{sub}/b.pdf\n"
+        f"   \n"  # whitespace-only line
+    )
+    out = collect_paths([f"@{list_file}"])
+    assert len(out) == 2

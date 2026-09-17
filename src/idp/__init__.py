@@ -24,6 +24,7 @@ Design draws from:
 """
 
 from idp.batch import BatchItemResult, process_batch
+from idp.console import pretty_print_result
 from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
 from idp.errors import IDPError, error_envelope
@@ -49,5 +50,6 @@ __all__ = [
     "discover_schema",
     "error_envelope",
     "load_template",
+    "pretty_print_result",
     "process_batch",
 ]
