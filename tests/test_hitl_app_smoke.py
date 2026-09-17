@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+import idp.hitl.app as _hitl_app  # module-level import for CodeQL dedup
+
 # Make sure the app module path is on sys.path so AppTest can find it.
 APP_PATH = Path(__file__).resolve().parent.parent / "src" / "idp" / "hitl" / "app.py"
 
@@ -38,8 +40,8 @@ def tmp_storage(tmp_path, monkeypatch):
 
 def test_app_imports_without_error():
     """The app module imports cleanly (Streamlit loaded lazily)."""
-    import idp.hitl.app  # noqa: F401  # noqa
-    assert hasattr(idp.hitl.app, "main")
+    import idp.hitl.app as _app  # noqa: F401  # alias for CodeQL dedup
+    assert hasattr(_app, "main")
 
 
 def test_app_renders_with_empty_storage(tmp_storage):
@@ -97,10 +99,9 @@ def test_format_result_label_includes_id_and_schema():
     """format_result_label produces a string with the result id and schema."""
     from unittest.mock import MagicMock
 
-    from idp.hitl.app import format_result_label
     result = MagicMock()
     result.id = "abc123"
     result.schema_name = "Invoice"
-    label = format_result_label(result)
+    label = _hitl_app.format_result_label(result)
     assert "abc123" in label
     assert "Invoice" in label

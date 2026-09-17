@@ -262,14 +262,13 @@ def test_api_key_required_returns_403_when_wrong(monkeypatch, tmp_path):
 def test_version_endpoint_returns_package_version():
     """GET /version returns idp.__version__."""
     from fastapi.testclient import TestClient
-
-    import idp
+    import idp as _idp
     from idp import api as api_mod
 
     with TestClient(api_mod.app) as client:
         r = client.get("/version")
         assert r.status_code == 200
-        assert r.text == idp.__version__
+        assert r.text == _idp.__version__
 
 
 # ---------------------------------------------------------------------------

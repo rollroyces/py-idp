@@ -7,6 +7,8 @@ from idp.rl.online import PolicyCache
 from idp.rl.policy import PolicyConfig
 from idp.storage.store import InMemoryStorage, StoredResult
 
+import idp.rl.online  # noqa: F401  # module-level import for `idp.rl.online.json` access
+
 
 def _reviewed_stored_result(rid: str = "r1", vendor_correct: bool = False) -> StoredResult:
     """A stored result that's been reviewed; vendor_name corrected if vendor_correct."""
@@ -289,12 +291,12 @@ def test_policy_cache_loads_defaults_on_unexpected_error(tmp_path, monkeypatch, 
     policy_file.write_text("{}")
 
     # Force json.loads to raise something unexpected
-    import idp.rl.online as online_mod
+    # (already imported at module level via 'from idp.rl.online import PolicyCache')
 
     def bad_loads(*args, **kwargs):
         raise OSError("synthetic permission denied")
 
-    monkeypatch.setattr(online_mod.json, "loads", bad_loads)
+    monkeypatch.setattr(idp.rl.online.json, "loads", bad_loads)  # type: ignore[attr-defined]
     caplog.set_level(logging.WARNING)
     cache = PolicyCache(policy_path=str(policy_file))
 
