@@ -69,6 +69,8 @@ pip install py-idp[docs]          # mkdocs + mkdocstrings，用於本地構建�
 
 ---
 
+詳見 [CHANGELOG.md](https://github.com/rollroyces/py-idp/blob/main/CHANGELOG.md) 查看發佈說明。
+
 ## 30 秒快速上手
 
 ```python
@@ -762,7 +764,7 @@ python -m examples.batch        # process_batch() 批次助手，用於 Databric
 python -m examples.discover_schema_sample  # AI 驅動的 Schema 探索（6 個情境，產生真實 PDF）
 ```
 
-`import idp; idp.__version__` → `0.3.7`.
+`import idp; idp.__version__` → `0.3.8`.
 
 ---
 

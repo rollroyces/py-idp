@@ -337,3 +337,355 @@ def test_unsupported_platforms_table_completeness():
     assert ("Darwin", "arm64") not in keys
     # Linux x86_64 must NOT be in the table (works with or without CUDA)
     assert ("Linux", "x86_64") not in keys
+
+
+# ---------------------------------------------------------------------------
+# NanonetsVLBackend._clean_json: pure-Python helper (line 396)
+# ---------------------------------------------------------------------------
+def test_clean_json_strips_json_code_fence():
+    """```json ... ``` wrappers are stripped."""
+    backend = _make_backend()
+    assert backend._clean_json('```json\n{"a": 1}\n```') == '{"a": 1}'
+
+
+def test_clean_json_strips_plain_code_fence():
+    """Plain ``` fences (no json hint) are also stripped."""
+    backend = _make_backend()
+    assert backend._clean_json('```\n{"b": 2}\n```') == '{"b": 2}'
+
+
+def test_clean_json_handles_empty_string():
+    """Empty input returns '{}' so downstream parser doesn't crash."""
+    backend = _make_backend()
+    assert backend._clean_json("") == "{}"
+
+
+def test_clean_json_handles_only_whitespace():
+    """A string with only whitespace returns '{}'."""
+    backend = _make_backend()
+    assert backend._clean_json("   \n\t  ") == "{}"
+
+
+def test_clean_json_passes_through_clean_json():
+    """Already-clean JSON is returned unchanged (no spurious stripping)."""
+    backend = _make_backend()
+    raw = '{"vendor_name": "Acme", "total": 100}'
+    assert backend._clean_json(raw) == raw
+
+
+def test_clean_json_handles_multiline_json():
+    """Multi-line JSON is preserved verbatim (no line truncation)."""
+    backend = _make_backend()
+    raw = '{\n  "a": 1,\n  "b": 2\n}'
+    assert backend._clean_json(raw) == raw
+
+
+def test_clean_json_strips_only_outer_fence_not_inner():
+    """Fences around the whole response are stripped; inner braces preserved."""
+    backend = _make_backend()
+    raw = '```json\n{\n  "x": {"nested": true}\n}\n```'
+    out = backend._clean_json(raw)
+    assert out == '{\n  "x": {"nested": true}\n}'
+
+
+# ---------------------------------------------------------------------------
+# NanonetsVLBackend._build_prompt (line 307)
+# ---------------------------------------------------------------------------
+def test_build_prompt_combines_system_and_user_messages():
+    """System + user messages are joined with \\n\\n separator."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[
+        Message(role="system", content="You are an extractor."),
+        Message(role="user", content="Extract the invoice."),
+    ])
+    out = backend._build_prompt(req)
+    assert "You are an extractor." in out
+    assert "Extract the invoice." in out
+    assert "\n\n" in out
+
+
+def test_build_prompt_handles_only_user_message():
+    """A single user message is returned as-is."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[
+        Message(role="user", content="Extract the invoice."),
+    ])
+    assert backend._build_prompt(req) == "Extract the invoice."
+
+
+def test_build_prompt_handles_empty_messages():
+    """Empty messages list returns the default prompt."""
+    from idp.llm.backend import CompletionRequest
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[])
+    assert backend._build_prompt(req) == "Extract the document."
+
+
+def test_build_prompt_skips_messages_without_content():
+    """Messages with role but no content are skipped."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[
+        Message(role="system", content=""),
+        Message(role="user", content="Real content"),
+        Message(role="assistant", content=""),  # skipped (assistant not system/user)
+    ])
+    out = backend._build_prompt(req)
+    assert out == "Real content"
+
+
+# ---------------------------------------------------------------------------
+# NanonetsVLBackend._extract_images (line 318): pulls base64 from Message
+# ---------------------------------------------------------------------------
+def test_extract_images_returns_empty_when_no_images():
+    """A request without images_b64 returns [] (text-only path)."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    assert backend._extract_images(req) == []
+
+
+def test_extract_images_decodes_data_uri_variant():
+    """A 'data:image/png;base64,...' URI is decoded and preprocessed."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    backend = _make_backend()
+    # Build a tiny valid PNG (1x1 white)
+    img = Image.new("RGB", (1, 1), color="white")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    from idp.llm.backend import CompletionRequest, Message
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=[data_uri]),
+    ])
+    images = backend._extract_images(req)
+    assert len(images) == 1
+
+
+def test_extract_images_decodes_bare_base64():
+    """A bare base64 string (no data: prefix) is also accepted."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    backend = _make_backend()
+    img = Image.new("RGB", (1, 1), color="red")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    from idp.llm.backend import CompletionRequest, Message
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=[b64]),
+    ])
+    images = backend._extract_images(req)
+    assert len(images) == 1
+
+
+def test_extract_images_skips_invalid_base64():
+    """Invalid base64 raises an exception inside but is caught; result skips it."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=["not-valid-base64!@#$"]),
+    ])
+    # Bad base64 is logged and skipped, returns []
+    assert backend._extract_images(req) == []
+
+
+def test_extract_images_handles_empty_string_in_list():
+    """Empty strings in images_b64 are skipped, not treated as an image."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=["", ""]),
+    ])
+    assert backend._extract_images(req) == []
+
+
+def test_extract_images_collects_across_messages():
+    """Images from multiple messages are all collected."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    backend = _make_backend()
+    img = Image.new("RGB", (1, 1), color="blue")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    from idp.llm.backend import CompletionRequest, Message
+    req = CompletionRequest(messages=[
+        Message(role="user", content="first", images_b64=[data_uri]),
+        Message(role="user", content="second", images_b64=[data_uri]),
+    ])
+    images = backend._extract_images(req)
+    assert len(images) == 2
+
+
+def test_extract_images_resizes_large_images_via_preprocess():
+    """_preprocess resizes images larger than max_image_side."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    backend = _make_backend(max_image_side=10)
+    # Make a 100x100 image
+    img = Image.new("RGB", (100, 100), color="green")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    from idp.llm.backend import CompletionRequest, Message
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=[data_uri]),
+    ])
+    images = backend._extract_images(req)
+    assert len(images) == 1
+    # The 100x100 image was resized to max_image_side=10
+    out_w, out_h = images[0].size
+    assert max(out_w, out_h) == 10
+
+
+# ---------------------------------------------------------------------------
+# NanonetsVLBackend.is_multimodal property
+# ---------------------------------------------------------------------------
+def test_is_multimodal_is_true():
+    """NanonetsVLBackend always reports multimodal capability."""
+    backend = _make_backend()
+    assert backend.is_multimodal is True
+
+
+# ---------------------------------------------------------------------------
+# NanonetsVLBackend._require_deps: raises helpful ImportError when deps missing
+# ---------------------------------------------------------------------------
+def test_require_deps_raises_helpful_message_when_missing(monkeypatch):
+    """If torch/transformers aren't importable, _require_deps raises with install hint."""
+    import sys
+
+    # Block the imports by inserting a fake module that raises
+    class _Blocker:
+        def find_spec(self, name, path=None, target=None):
+            if name in ("torch", "transformers"):
+                raise ImportError("blocked by test")
+
+    backend = _make_backend()
+    monkeypatch.setattr(sys, "meta_path", [_Blocker()] + sys.meta_path)
+    # Clear any cached imports
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.delitem(sys.modules, "transformers", raising=False)
+
+    with pytest.raises(ImportError, match="\\[hf-vlm\\]"):
+        backend._require_deps()
+
+
+# ---------------------------------------------------------------------------
+# complete() path dispatch (no images → text-only path)
+# ---------------------------------------------------------------------------
+def test_complete_with_no_images_uses_text_only_path(monkeypatch):
+    """complete() with no images routes to _generate_text_only, not _generate_with_images."""
+    from idp.llm.backend import CompletionRequest, Message
+
+    backend = _make_backend()
+    calls = {"text_only": 0, "with_images": 0}
+
+    def fake_text_only(text):
+        calls["text_only"] += 1
+        return '{"vendor_name": "Acme"}'
+
+    def fake_with_images(text, images):
+        calls["with_images"] += 1
+        return "{}"
+
+    monkeypatch.setattr(backend, "_ensure_loaded", lambda: None)
+    monkeypatch.setattr(backend, "_generate_text_only", fake_text_only)
+    monkeypatch.setattr(backend, "_generate_with_images", fake_with_images)
+
+    req = CompletionRequest(messages=[Message(role="user", content="hi")])
+    out = backend.complete(req)
+    assert calls == {"text_only": 1, "with_images": 0}
+    assert "vendor_name" in out
+
+
+def test_complete_with_images_uses_multimodal_path(monkeypatch):
+    """complete() with images routes to _generate_with_images."""
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    backend = _make_backend()
+    calls = {"text_only": 0, "with_images": 0}
+
+    def fake_with_images(text, images):
+        calls["with_images"] += 1
+        return '{"vendor_name": "Acme"}'
+
+    def fake_text_only(text):
+        calls["text_only"] += 1
+        return "{}"
+
+    monkeypatch.setattr(backend, "_ensure_loaded", lambda: None)
+    monkeypatch.setattr(backend, "_generate_text_only", fake_text_only)
+    monkeypatch.setattr(backend, "_generate_with_images", fake_with_images)
+
+    # Build a real (tiny) image
+    img = Image.new("RGB", (1, 1), color="white")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    from idp.llm.backend import CompletionRequest, Message
+    req = CompletionRequest(messages=[
+        Message(role="user", content="hi", images_b64=[data_uri]),
+    ])
+    backend.complete(req)
+    assert calls == {"text_only": 0, "with_images": 1}
+
+
+# ---------------------------------------------------------------------------
+# Helper to construct backend without __init__ deps (mock device loading)
+# ---------------------------------------------------------------------------
+def _make_backend(**kwargs):
+    """Construct NanonetsVLBackend bypassing the platform check.
+
+    The real __init__ calls _check_platform_support which can fail in
+    CI for unknown platforms. We construct via __new__ and set the
+    relevant attributes by hand.
+    """
+    from idp.llm.nanonets import NanonetsVLBackend
+
+    backend = NanonetsVLBackend.__new__(NanonetsVLBackend)
+    backend.model_id = kwargs.get("model_id", "nanonets/Nanonets-OCR2-3B")
+    backend.device = kwargs.get("device", "auto")
+    backend.dtype = kwargs.get("dtype", "auto")
+    backend.max_image_side = kwargs.get("max_image_side", 1568)
+    backend.load_in_4bit = kwargs.get("load_in_4bit", False)
+    backend.cache_dir = kwargs.get("cache_dir")
+    backend._model = None
+    backend._processor = None
+    backend._resolved_device = None
+    backend._resolved_dtype = None
+    return backend
