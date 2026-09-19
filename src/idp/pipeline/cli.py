@@ -150,6 +150,70 @@ def discover_schema_cmd(
         console.print("\n[dim](pass --output FILE to save the JSON Schema)[/dim]")
 
 
+@app.command(name="discover-template")
+def discover_template_cmd(
+    sources: list[str] = typer.Argument(
+        ...,
+        help="Paths to 3-5 sample PDFs / text files of the same document type.",
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        help="Directory to write the generated <name>.md template into.",
+    ),
+    schema_name_hint: str | None = typer.Option(
+        None,
+        "--schema-name",
+        "-s",
+        help="Override the template name. Default: majority classification vote.",
+    ),
+    backend: str = typer.Option(
+        "mock",
+        "--backend",
+        "-b",
+        help="LLM backend for the underlying pipeline (mock | openai | ollama | ...).",
+    ),
+    schema: str = typer.Option(
+        "Invoice",
+        "--schema",
+        help="Pydantic schema name used for the per-sample extraction.",
+    ),
+):
+    """Auto-discover a reusable template from 3-5 sample documents.
+
+    Weekend-hack version: clusters the field names found in each
+    sample's extraction and writes one template.md. See
+    docs/ROADMAP.md B1 for scope.
+    """
+    from idp.template_discovery import discover_template
+
+    console.print(
+        f"[cyan]Discovering template from {len(sources)} sample(s)[/cyan]"
+    )
+    try:
+        template = discover_template(
+            samples=sources,
+            output_dir=Path(output),
+            schema_name_hint=schema_name_hint,
+            backend=backend,
+            schema=schema,
+        )
+    except (ValueError, FileNotFoundError, OSError) as e:
+        console.print(f"[red]template discovery failed:[/red] {e}")
+        raise typer.Exit(code=1) from None
+
+    console.print(f"[green]wrote template:[/green] {template.source_path}")
+    console.print(f"[bold]name:[/bold]   {template.name}")
+    console.print(f"[bold]schema:[/bold] {template.schema}")
+    # Count "## Fields" bullets in the body for a quick summary.
+    field_lines = [
+        line for line in template.body.splitlines()
+        if line.startswith("* **") and "** —" in line
+    ]
+    console.print(f"[bold]fields:[/bold] {len(field_lines)} detected")
+
+
 @app.command(name="batch")
 def batch(
     sources: list[str] = typer.Argument(
