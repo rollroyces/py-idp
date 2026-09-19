@@ -25,6 +25,8 @@
 ## Contents
 
 - [Install](#install)
+  - [Zero-config quickstart](#zero-config-quickstart)
+  - [Optional extras](#optional-extras)
 - [30-second tour](#30-second-tour)
 - [The pipeline](#the-pipeline)
 - [LLM backends](#llm-backends)
@@ -50,8 +52,32 @@
 
 ## Install
 
+**Core install** (works without any API key — uses the in-tree mock backend):
+
 ```bash
-pip install py-idp                # core (pydantic + typer + rich + httpx + pdfplumber + tiktoken)
+pip install py-idp                # core: pydantic + typer + rich + httpx + pdfplumber + tiktoken
+```
+
+### Zero-config quickstart
+
+```python
+from idp.easy import extract_one
+fields = extract_one("invoice.pdf")          # uses IDP_BACKEND env var, default "mock"
+print(fields)                                 # -> dict of extracted Invoice fields
+```
+
+Drop a `invoice.pdf` (or `invoice.txt`) in the current directory and run
+`python examples/00_zero_to_extraction.py` — no API key needed, prints the
+extracted fields plus a hint for upgrading to a real local LLM
+(`set IDP_BACKEND=ollama and run \`ollama pull qwen2.5:0.5b\``).
+
+### Optional extras
+
+> **All extras are OPTIONAL** — they unlock advanced features (better PDF
+> table extraction, additional LLM providers, the FastAPI server, etc.) but
+> none are required for the first extraction above. Install only what you need.
+
+```bash
 pip install py-idp[docling]      # IBM Docling — best PDF table extraction
 pip install py-idp[ocr]           # tesseract fallback for noisy scans
 pip install py-idp[openai]       # OpenAI SDK (also used for 8 China LLMs)
