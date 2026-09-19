@@ -186,19 +186,23 @@ If any of these comes up in review, defer to the existing "Items I will NOT work
 
 ## Open questions (summary)
 
-For the implementer to track — all of these are blockers for at
-least one Tier C item:
+~~For the implementer to track — all of these are blockers for at
+least one Tier C item:~~
 
-1. **C1**: notebooks in one PR or split?
-2. **C2**: which dataset? (CORD / FUNSD / Kaggle build-your-own)
-3. **C3**: bulk-accept threshold 0.9 or 0.95?
-4. **C4**: raw-extraction-only migration or full-feedback-loop-aware?
-5. **D1**: systematic-error threshold 0.6 or 0.8?
-6. **D2**: ship `OllamaBackend` in v0.4 or defer?
-7. **D3**: fold into C1 notebook 03 or its own notebook?
+**All 7 questions resolved on 2026-09-19 (user delegated).** See the
+"Decisions made on 2026-09-19" subsection of the Decision log below
+for each decision, its trade-off, and how to override a single one
+without revisiting the others.
 
-Seven questions, one per item + one clarification. None are existential.
-Each can be answered in a sentence in the PR review.
+For historical reference, the questions were:
+
+1. ~~**C1**: notebooks in one PR or split?~~ → **one PR (combined)**
+2. ~~**C2**: which dataset? (CORD / FUNSD / Kaggle build-your-own)~~ → **CORD**
+3. ~~**C3**: bulk-accept threshold 0.9 or 0.95?~~ → **0.9**
+4. ~~**C4**: raw-extraction-only migration or full-feedback-loop-aware?~~ → **raw-extraction only**
+5. ~~**D1**: systematic-error threshold 0.6 or 0.8?~~ → **0.6**
+6. ~~**D2**: ship `OllamaBackend` in v0.4 or defer?~~ → **v0.4**
+7. ~~**D3**: fold into C1 notebook 03 or its own notebook?~~ → **folded into C1**
 
 ---
 
@@ -206,3 +210,106 @@ Each can be answered in a sentence in the PR review.
 
 - **2026-09-19**: v0.4 roadmap written as a concrete Tier C spec. Draft for review.
 - (TBD after review): adopt as `docs/ROADMAP_v0.4.md`, link from README, surface in v0.4 release notes when items land.
+
+### Decisions made on 2026-09-19 (assistant-driven, user delegated)
+
+User explicitly delegated the open questions ("please help to make the
+decision on your own"). Each decision below is recorded with a
+recommendation, the alternative considered, and the trade-off. Any
+single decision can be overridden in PR review without revisiting the
+others.
+
+#### Q1 (C1 notebooks) — **decided: ONE PR, combined**
+
+Combine the basic notebooks (01_pipeline_minimal, 02_hitl_loop) with
+the batch notebook (03_batch = D3) into a single C1 PR. Rationale: all
+three use the same v0.3.8 APIs, no inter-dependencies, no shared
+infrastructure that benefits from incremental review. Splitting them
+just triples the PR overhead without changing what gets reviewed. D3
+is then *folded into* C1 rather than being a separate direction.
+Override if you want a 4-notebook collection with a dedicated batch
+notebook; trivial to split later.
+
+#### Q2 (C2 dataset) — **decided: CORD**
+
+CORD ships with a clear research-use license, integrates with the
+existing `cord_subset/` smoke data (no new directory), and gets a
+v0.4-sized eval (50–200 docs) into the repo in ~1 day. FUNSD is a
+fine alternative but adds a *new* doc type (forms) we don't have a
+schema for yet, expanding scope beyond the user's "still need
+accuracy" framing. Kaggle "build your own" is 3–5 days of license
+review work and the user said "much easier" — not a v0.4 fit.
+Override if you want FUNSD (forms) or want to spend the 3–5 days on a
+custom dataset.
+
+#### Q3 (C3 bulk-accept threshold) — **decided: 0.9**
+
+0.9 trusts the model when it's confident, which is the point of the
+button (the reviewer shouldn't be reading fields the model already
+flagged as ≥0.9). 0.95 is over-conservative: the field histogram the
+subagent is also adding (the C3 #4 acceptance criterion) already lets
+the reviewer see how many fields are in each bucket, so the *bulk*
+button doesn't need to be the cautious one. Recommendation
+documented as 0.9 with the CLI override available.
+
+#### Q4 (C4 migration) — **decided: raw-extraction only**
+
+Re-run the pipeline against v2 templates, write a side-by-side diff,
+do **not** touch existing v1 records, do **not** propagate human
+reviews to the v2 record. Rationale: v1 reviews are attached to v1
+extractions because the *fields* they evaluated may not exist in v2;
+re-attaching them silently is the kind of "looks fine but lost data"
+behavior that erodes trust in the storage layer. The simpler tool
+ships in 2–3 days; the full feedback-loop-aware version needs
+policy-version tracking that does not exist yet and is honest v0.5
+work.
+
+#### Q5 (D1 systematic-error threshold) — **decided: 0.6**
+
+0.6 catches real bugs early. The triage tool is *advisory* — its
+output does not auto-correct anything; the reviewer reads it and
+makes a call. False positives cost ~10 seconds of "huh, that field
+looks fine to me"; false negatives cost a model bug that ships to
+production uncorrected. The asymmetry favors 0.6. CLI override (`--threshold`)
+ships in v0.4, so a user who finds 0.6 too noisy can raise it per-repo
+without code changes. Override to 0.8 if your review data shows 0.6
+floods the report.
+
+#### Q6 (D2 OllamaBackend timing) — **decided: SHIP IN v0.4**
+
+Without `OllamaBackend`, the `TieredBackend` story is theoretical —
+users have to write a 30-line `Backend` subclass themselves to even
+try the cheap-first pattern. With `OllamaBackend`, the example
+becomes "two lines of code, you save 10× per doc, accuracy is
+preserved on hard fields." That's the headline. The `OllamaBackend`
+itself is a thin wrapper (~80 LOC) over the local Ollama HTTP API;
+the existing `Backend` base class and the OpenAI-compat surface
+already exist. Worth the 0.5 day to land in v0.4. Override to v0.5
+if the v0.4 timeline is already tight.
+
+#### Q7 (D3 batch notebook) — **decided: folded into C1**
+
+C1 notebook 03 covers D3 in the same file. No standalone
+`04_batch_advanced.ipynb` for v0.4. Rationale: the batch story is the
+*evaluation* story for v0.4 (D3 is what makes the C2 BASELINE.md
+numbers interpretable in practice), and putting it adjacent to the
+single-doc notebooks means a single reviewer can validate the whole
+"one doc → many docs" learning arc without context-switching. Split
+later if real users ask for a Delta Lake–specific notebook.
+
+#### Summary of the v0.4 plan as decided
+
+| priority | item | what ships |
+|---|---|---|
+| **P0** | B1 (already done) | `discover_template()` + CLI |
+| **P0** | zero-config quickstart (already done) | `idp.easy.extract_one()` |
+| **P1** | C1 + D3 | 3 notebooks, one PR |
+| **P2** | D2 + OllamaBackend | `TieredBackend`, `OllamaBackend`, `examples/06_tiered_pipeline.py` |
+| **P3** | C3 + D1 | HITL polish + triage tool — they ship together as one PR (D1 is the data layer, C3 is the UI) |
+| **P4** | C2 (CORD) | baseline eval, slow-marked test, BASELINE.md |
+| **P5** | C4 (raw-extraction only) | `idp migrate-template` CLI |
+
+Six items → five PRs (C3+D1 combined). P1 lands first because
+notebooks are the lowest-risk highest-visibility win. P2 next because
+it directly serves the "much easier setup" goal. P3, P4, P5 can land
+in any order after that.
