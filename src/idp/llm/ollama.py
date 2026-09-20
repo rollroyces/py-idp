@@ -51,14 +51,10 @@ v0.4 scope (per ``docs/ROADMAP_v0.4.md`` Q6): local-only, no streaming.
 """
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 
 from idp.llm.backend import Backend, CompletionRequest, Message
-
-log = logging.getLogger(__name__)
-
 
 DEFAULT_BASE_URL = "http://localhost:11434"
 """Default Ollama server URL — Ollama's documented default on install."""
