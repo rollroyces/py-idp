@@ -107,6 +107,34 @@ def count_corrections(result: StoredResult) -> int:
     )
 
 
+def corrected_fields(result: StoredResult) -> set[str]:
+    """The set of field names the human actually changed.
+
+    Companion to ``count_corrections`` that returns WHICH fields
+    differed rather than just how many. Used by ``idp.hitl.triage``
+    to attribute per-field correction rates.
+
+    Behavior:
+      * Unreviewed (``reviewed_extraction is None``) → empty set.
+      * ``extraction`` is ``None`` → empty set (defensive).
+      * Keys present only in ``reviewed_extraction`` are NOT counted
+        as corrections; we only know what the model *did* claim a
+        value for, not fields the human added. Mirrors
+        ``count_corrections``.
+      * Fields present in ``extraction`` but missing from
+        ``reviewed_extraction`` ARE counted as corrections
+        (deletion == change).
+
+    Returns:
+        A new ``set[str]`` of field names. Safe to mutate by the caller.
+    """
+    if result.reviewed_extraction is None:
+        return set()
+    model_ext = result.extraction or {}
+    reviewed_ext = result.reviewed_extraction
+    return {k for k, v in model_ext.items() if reviewed_ext.get(k) != v}
+
+
 # ---------------------------------------------------------------------------
 # Field editing: parse / stringify complex values
 # ---------------------------------------------------------------------------
