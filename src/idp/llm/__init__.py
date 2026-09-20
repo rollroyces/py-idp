@@ -11,6 +11,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from idp.llm.backend import (
+    _REGISTRY,
+    _REGISTRY_ALIASES,
     AnthropicBackend,
     Backend,
     CompletionRequest,
@@ -19,6 +21,7 @@ from idp.llm.backend import (
     OpenAICompatBackend,
     get_backend,
     list_backends,
+    register_backend,
 )
 from idp.llm.china import (
     CHINA_PROVIDER_PRESETS,
@@ -51,4 +54,5 @@ __all__ = [
     "list_backends",
     "list_china_providers",
     "list_international_providers",
+    "register_backend",
 ]
