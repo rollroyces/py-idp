@@ -417,7 +417,9 @@ def test_extract_uses_template_when_filename_matches(client_with_templates) -> N
 
 def test_extract_uses_template_when_mime_matches(client_with_templates) -> None:
     """Filename doesn't match any pattern, but MIME does -> routed by MIME."""
-    files = {"file": ("random.bin", b"%PDF-1.4\nfake", "application/pdf")}
+    # Extension reflects actual content (PDF magic bytes); the framework's
+    # upload whitelist now rejects .bin even when the body is a valid PDF.
+    files = {"file": ("random.pdf", b"%PDF-1.4\nfake", "application/pdf")}
     r = client_with_templates.post("/extract", files=files)
     assert r.status_code == 200
     data = r.json()
@@ -442,7 +444,9 @@ def test_extract_explicit_schema_skips_template_routing(client_with_templates) -
 
 def test_extract_no_match_no_template(client_with_templates) -> None:
     """Filename + MIME don't match any template -> template_used is None."""
-    files = {"file": ("random.bin", b"%PDF-1.4\nfake", "text/plain")}
+    # Extension reflects content; the framework now whitelists by
+    # extension so .bin is rejected with 415.
+    files = {"file": ("random.pdf", b"%PDF-1.4\nfake", "text/plain")}
     r = client_with_templates.post("/extract", files=files)
     assert r.status_code == 200
     data = r.json()
@@ -488,3 +492,161 @@ def test_404_returns_error_envelope(client_with_templates) -> None:
     # wrap that in our envelope (only IDPError subtypes get the
     # envelope). This test documents that contract.
     assert "detail" in r.json()
+
+
+# -----------------------------------------------------------------------
+# P0 audit fixes: upload sanitization, async pipeline, _safe_load
+# -----------------------------------------------------------------------
+def test_sanitize_upload_filename_strips_traversal():
+    """Unit test for the sanitization helper.
+
+    Path-traversal payloads (``../../../etc/passwd``) get every char
+    outside [A-Za-z0-9._-] replaced with ``_`` — the result is safe to
+    join with the upload directory and cannot escape it.
+    """
+    from idp.api import _sanitize_upload_filename
+
+    # Directory components gone, all bad chars → underscore
+    # (Note: Path(name).name reduces "../foo/bar" -> "bar" first, then
+    # the regex sub replaces any remaining non-[A-Za-z0-9._-] chars.)
+    assert _sanitize_upload_filename("../../../etc/passwd") == "passwd"
+    # Pure traversal collapses safely (Path("a/b/c").name -> "c", then
+    # no chars to sub, result is just "c")
+    assert _sanitize_upload_filename("a/b/c") == "c"
+    # Backslash normalised to slash then stripped (cross-platform safety)
+    assert _sanitize_upload_filename("a\\b\\c") == "c"
+    assert _sanitize_upload_filename("..\\..\\etc\\passwd") == "passwd"
+    assert "/" not in _sanitize_upload_filename("a/b/c")
+    # Dotfile prefix added (can't overwrite .bashrc etc.)
+    assert not _sanitize_upload_filename(".bashrc").startswith(".")
+    # Empty / None fallback
+    assert _sanitize_upload_filename("") == "upload"
+    assert _sanitize_upload_filename(None) == "upload"  # type: ignore[arg-type]
+    # Normal filename passes through unchanged
+    assert _sanitize_upload_filename("invoice-2024.pdf") == "invoice-2024.pdf"
+
+
+def test_upload_with_traversal_filename_is_sanitized(client_with_templates) -> None:
+    """An attacker uploading ``../../etc/passwd.pdf`` cannot make the
+    upload path escape the upload directory.
+
+    The framework's sanitization turns the traversal payload into a
+    safe filename and the request proceeds normally with the safe name.
+    """
+    files = {"file": ("../../etc/passwd.pdf", b"%PDF-1.4\nfake", "application/pdf")}
+    r = client_with_templates.post("/extract", files=files)
+    assert r.status_code == 200, r.text
+
+
+def test_upload_rejects_disallowed_extension(client_with_templates) -> None:
+    """An extension not in the whitelist returns 415 before any write."""
+    files = {"file": ("evil.exe", b"MZ\\x00\\x00fake-binary", "application/octet-stream")}
+    r = client_with_templates.post("/extract", files=files)
+    assert r.status_code == 415
+    assert "unsupported file type" in r.text
+
+
+def test_upload_sanitizes_dotfiles(client_with_templates) -> None:
+    """.bashrc-style dotfile names get a prefix; the file lands inside
+    the upload dir with a valid extension, not on the host root."""
+    files = {"file": (".bashrc.pdf", b"%PDF-1.4\nfake", "application/pdf")}
+    r = client_with_templates.post("/extract", files=files)
+    assert r.status_code == 200
+
+
+def test_pipeline_arun_is_async() -> None:
+    """Pipeline.arun is async and runs the blocking Pipeline.run in a
+    thread. Without this, ``/extract`` froze the FastAPI event loop for
+    the full LLM latency (5-15s on Nanonets, 1-30s on hosted backends).
+    """
+    import asyncio
+    import inspect
+    from pathlib import Path
+
+    from idp.core.document import Document
+    from idp.pipeline.pipeline import Pipeline
+
+    pipeline = Pipeline(backend="mock", schema="Invoice")
+    # ``arun`` must be a coroutine function (i.e. async def)
+    assert inspect.iscoroutinefunction(pipeline.arun)
+    # And it must produce a PipelineResult when awaited.
+    # Document.from_path() with a real (existing) path.
+    doc = Document.from_path(Path(__file__))
+    result = asyncio.run(pipeline.arun(doc))
+    assert result.backend_name == "mock"
+
+
+def test_cors_installed_via_env_at_import_time(monkeypatch) -> None:
+    """CORS middleware must be installed when IDP_CORS_ORIGINS is set
+    in the env BEFORE the app is imported.
+
+    Starlette forbids ``add_middleware`` after the app has started,
+    so the framework installs CORSMiddleware at module-import time.
+    We verify this by spawning a subprocess with the env var set,
+    hitting /healthz with a cross-origin Origin header, and asserting
+    the ``Access-Control-Allow-Origin`` response header is present.
+
+    This is the regression test for the original bug: ``_install_cors``
+    was defined but never called, so even with CORS configured, the
+    framework silently ignored it.
+    """
+    import os
+    import subprocess
+    import sys
+
+    # Skip this test if uvicorn is not installed (CI without [api] extra)
+    pytest.importorskip("uvicorn")
+
+    # Pick a high port that's unlikely to be in use
+    port = "18765"
+
+    # Boot a real uvicorn process with IDP_CORS_ORIGINS set. Using a
+    # subprocess is the only way to test import-time behavior — once
+    # the test process has imported idp.api, the CORS middleware has
+    # already been (or not been) installed and we can't undo it.
+    env = {
+        **os.environ,
+        "IDP_API_KEY_REQUIRED": "0",
+        "IDP_CORS_ORIGINS": "https://allowed.example.com",
+        "IDP_API_PORT": port,
+        "IDP_LOG_LEVEL": "WARNING",
+        "IDP_API_HOST": "127.0.0.1",
+    }
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "idp.api:app",
+         "--host", "127.0.0.1", "--port", port, "--log-level", "warning"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        # Wait for the server to be ready (poll /healthz)
+        import time
+        import urllib.request
+        deadline = time.time() + 15
+        ready = False
+        while time.time() < deadline:
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1).read()
+                ready = True
+                break
+            except Exception:
+                time.sleep(0.2)
+        assert ready, "uvicorn did not become ready in 15s"
+
+        # Now hit /healthz with a cross-origin Origin header. CORS
+        # middleware should echo it back as Access-Control-Allow-Origin.
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/healthz",
+            headers={"Origin": "https://allowed.example.com"},
+        )
+        resp = urllib.request.urlopen(req, timeout=2)
+        assert resp.headers.get("Access-Control-Allow-Origin") == "https://allowed.example.com", (
+            f"CORS middleware not installed. Headers: {dict(resp.headers)}"
+        )
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()

@@ -475,3 +475,48 @@ def test_render_first_n_returns_empty_when_pages_have_no_images(tmp_path):
     doc.pages = [Page(page_number=0, text="p0", images_b64=[])]
     out = render_first_n_pages_to_images(doc, n=2)
     assert out == []
+
+
+# -----------------------------------------------------------------------
+# B27: _safe_load rejects non-dict JSON (silent data-loss bug fix)
+# -----------------------------------------------------------------------
+def test_b27_safe_load_non_dict_json_returns_error_envelope():
+    """Regression: previously, _safe_load wrapped a non-dict JSON value
+    (e.g. the bare string ``"42"``, an array, the null literal) as
+    ``{"_value": v}``. Pydantic's ``model_validate`` accepted this as
+    "valid extraction, all required fields missing" — the pipeline
+    returned a successful empty extraction with no error, silently
+    dropping the user's data.
+
+    The fix: return the same ``{"_error": ..., "_raw": ...}`` envelope
+    that parse failures already used, so the caller's
+    ``schema.model_validate`` raises and ``doc.errors`` records it.
+    """
+    out_str = _safe_load('"42"')
+    assert "_error" in out_str, f"bare-string JSON should return error envelope, got {out_str!r}"
+    assert "_value_type" in out_str
+    assert out_str["_value_type"] == "str"
+
+    out_list = _safe_load("[1, 2, 3]")
+    assert "_error" in out_list, f"array JSON should return error envelope, got {out_list!r}"
+    assert out_list["_value_type"] == "list"
+
+    out_bool = _safe_load("true")
+    assert "_error" in out_bool, f"bool JSON should return error envelope, got {out_bool!r}"
+    assert out_bool["_value_type"] == "bool"
+
+    out_null = _safe_load("null")
+    assert "_error" in out_null, f"null JSON should return error envelope, got {out_null!r}"
+    assert out_null["_value_type"] == "NoneType"
+
+
+def test_b27_safe_load_valid_dict_passes_through():
+    """The fix must NOT break valid dict input."""
+    out = _safe_load('{"vendor": "Acme", "total": 100}')
+    assert out == {"vendor": "Acme", "total": 100}
+
+
+def test_b27_safe_load_garbage_still_returns_error_envelope():
+    """Unchanged from before the fix: non-JSON input still errors."""
+    out = _safe_load("hello world")
+    assert "_error" in out
