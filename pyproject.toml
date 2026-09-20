@@ -97,6 +97,15 @@ docs = [
     "mkdocstrings[python]>=0.25",
     "pymdown-extensions>=10.7",
 ]
+# Running the example notebooks in examples/notebooks/. nbformat/nbconvert are
+# needed for re-executing notebooks; ipykernel to register the Python kernel
+# in Jupyter. pandas is used by the batch notebook's DataFrame cell.
+notebooks = [
+    "nbformat>=5.10",
+    "nbconvert>=7.0",
+    "ipykernel>=6.0",
+    "pandas>=2.1",
+]
 
 [project.scripts]
 idp = "idp.pipeline.cli:app"
@@ -118,6 +127,10 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Jupyter notebooks (examples/notebooks/*.ipynb) are excluded — they have
+# cell-by-cell imports and execution-order quirks that don't fit ruff's
+# module-level model. Use `nbqa ruff` if you want notebook linting.
+extend-exclude = ["examples/notebooks/*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
