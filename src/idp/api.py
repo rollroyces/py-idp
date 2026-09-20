@@ -29,8 +29,10 @@ import hashlib
 import hmac
 import os
 import re
+import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,7 @@ from idp.templates import TemplateRegistry
 _log = get_logger("idp.api")
 _settings: Settings | None = None
 _rate_limiter: RateLimiter | None = None
+_async_rate_limiter: RateLimiter | None = None  # per-API-key cap on /extract_async
 _upload_dir: Path | None = None
 _template_registry: TemplateRegistry | None = None
 _job_queue: InProcessQueue | None = None
@@ -72,6 +75,35 @@ _results_store: InMemoryStorage | None = None
 _REQUEST_ID_HEADER = "x-request-id"
 _SIGNATURE_HEADER = "X-IDP-Signature"
 _SIGNATURE_SCHEME = "sha256"
+_TIMESTAMP_HEADER = "X-IDP-Timestamp"
+_NONCE_HEADER = "X-IDP-Nonce"
+
+# Bounded LRU cache of nonces we've seen on /verify_signature. Acts as
+# a single-shot blacklist — replay protection. The OrderedDict lets
+# us pop the oldest entry when we exceed the configured maxsize.
+_nonce_cache: "OrderedDict[str, None]" = OrderedDict()
+_nonce_lock = threading.Lock()
+
+
+def _nonce_check_and_add(nonce: str, maxsize: int) -> bool:
+    """Record ``nonce``; return True iff it was new.
+
+    Side effect: bounded LRU eviction of the oldest nonces when full.
+    Thread-safe.
+    """
+    with _nonce_lock:
+        if nonce in _nonce_cache:
+            return False
+        _nonce_cache[nonce] = None
+        while len(_nonce_cache) > maxsize:
+            _nonce_cache.popitem(last=False)
+        return True
+
+
+def _nonce_cache_reset() -> None:
+    """Clear the nonce cache (for tests only)."""
+    with _nonce_lock:
+        _nonce_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +195,7 @@ def auth(request: Request) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Configure logging, validate settings, prep upload dir, load templates."""
-    global _settings, _rate_limiter, _upload_dir, _template_registry
+    global _settings, _rate_limiter, _async_rate_limiter, _upload_dir, _template_registry
     global _job_queue, _results_store
 
     # Load settings (raises ConfigurationError -> startup aborts with 500)
@@ -182,6 +214,12 @@ async def lifespan(app: FastAPI):
     _rate_limiter = RateLimiter(
         per_key_per_minute=_settings.rate_limit_per_minute,
         global_per_minute=0,  # disabled by default; set via env if needed
+    )
+    # /extract_async uses a separate, smaller budget. Built fresh on
+    # every lifespan so tests can override Settings before startup.
+    _async_rate_limiter = RateLimiter(
+        per_key_per_minute=_settings.idp_async_rate_limit_per_minute,
+        global_per_minute=0,  # per-key only
     )
 
     _upload_dir = Path(os.environ.get("IDP_UPLOAD_DIR", "/tmp/idp-uploads"))
@@ -241,12 +279,18 @@ async def lifespan(app: FastAPI):
 
         from concurrent.futures import ThreadPoolExecutor
 
+        started = time.perf_counter()
+        success = True
         with ThreadPoolExecutor(max_workers=1) as ex:
             try:
                 res = ex.submit(_run_sync).result()
             except Exception as e:  # noqa: BLE001
                 job.error = str(e)
+                metrics.inc("async_jobs_failed", 1, backend=backend_name, error_type=type(e).__name__)
+                success = False
                 return
+        duration = time.perf_counter() - started
+        metrics.observe("async_job_duration_seconds", duration, backend=backend_name)
 
         stored = _pipeline_result_to_stored(res, job)
         if _results_store is not None:
@@ -258,19 +302,56 @@ async def lifespan(app: FastAPI):
             cb_secret = job.extra.get("callback_secret")
             if cb:
                 _post_webhook(cb, stored, cb_secret)
+        # Final job-state metric. We track success locally because
+        # ``job.status`` is set by the InProcessQueue worker AFTER the
+        # runner returns (it's still RUNNING while we're in this body).
+        # A failed runner returns early above (``success = False``),
+        # so checking the local flag avoids the timing race.
+        if success:
+            metrics.inc("async_jobs_succeeded", 1, backend=backend_name)
 
-    _job_queue = InProcessQueue(runner=_job_runner)
+    _job_queue = InProcessQueue(
+        runner=_job_runner,
+        max_concurrent=_settings.idp_async_max_concurrent,
+    )
     await _job_queue.start()
-    _log.info("async job queue started (in-process)")
+    _log.info(
+        "async job queue started (in-process, max_concurrent=%d, async_rl=%d/min)",
+        _settings.idp_async_max_concurrent, _settings.idp_async_rate_limit_per_minute,
+    )
+
+    # Background gauge-refresh task: every 1s, publish current queue depth
+    # and inflight count so /metrics shows fresh values without operators
+    # needing to poll /jobs/{id}.
+    import asyncio as _asyncio
+
+    queue_ref = _job_queue  # capture the local, non-None reference
+
+    async def _refresh_async_gauges() -> None:
+        try:
+            while True:
+                metrics.gauge("async_queue_depth", queue_ref.queue_depth)
+                metrics.gauge("async_inflight_jobs", queue_ref.inflight)
+                await _asyncio.sleep(1.0)
+        except _asyncio.CancelledError:
+            return
+
+    _gauge_task = _asyncio.create_task(_refresh_async_gauges())
 
     yield
 
     # Shutdown: clean up, log final metrics
     _log.info("py-idp API shutting down. metrics: %s", metrics.snapshot())
+    _gauge_task.cancel()
+    try:
+        await _gauge_task
+    except _asyncio.CancelledError:
+        pass
     if _job_queue is not None:
         await _job_queue.stop()
     _settings = None
     _rate_limiter = None
+    _async_rate_limiter = None
     _upload_dir = None
     _template_registry = None
     _job_queue = None
@@ -484,6 +565,7 @@ async def extract_sync(
     dependencies=[Depends(auth)],
 )
 async def extract_async(
+    request: Request,
     file: UploadFile,
     schema_name: str | None = Form(default=None),
     backend: str | None = Form(default=None),
@@ -525,6 +607,21 @@ async def extract_async(
     if callback_url:
         _ssrf_check_callback_url(callback_url)
 
+    # Per-API-key rate-limit on async submissions. /extract_async is
+    # heavier than /extract (each call enqueues work the server runs
+    # off-loop), so it gets its own smaller per-minute budget. Keyed on
+    # the API key the caller presented; falls back to "_anon" to share
+    # a bucket across unauthenticated submissions. Fails closed via
+    # RateLimitedError (mapped to 429 + Retry-After by the existing
+    # exception handler).
+    _api_key = (
+        request.headers.get("X-API-Key")
+        or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        or "_anon"
+    )
+    if _async_rate_limiter is not None:
+        _async_rate_limiter.check(key=_api_key)
+
     # Template routing mirrors /extract
     reg = _require_template_registry()
     if schema_name is None:
@@ -559,7 +656,12 @@ async def extract_async(
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(auth)])
 async def get_job_status(job_id: str) -> dict[str, Any]:
-    """Return job status (pending / running / succeeded / failed)."""
+    """Return job status (pending / running / succeeded / failed).
+
+    Includes ``estimated_queue_position`` when the job is still queued
+    (returns 0 if currently running, None if finished) so callers can
+    decide whether to back off or wait.
+    """
     queue = _require_job_queue()
     job = await queue.status(job_id)
     if job is None:
@@ -573,7 +675,11 @@ async def get_job_status(job_id: str) -> dict[str, Any]:
         "started_at": job.started_at,
         "finished_at": job.finished_at,
         "error": job.error,
+        "estimated_queue_position": queue.estimated_queue_position(job_id),
     }
+    # Live queue depth + inflight for observability
+    payload["queue_depth"] = queue.queue_depth
+    payload["inflight_jobs"] = queue.inflight
     if job.result_id:
         payload["result_id"] = job.result_id
         payload["result_url"] = f"/results/{job.result_id}"
@@ -596,18 +702,26 @@ async def get_result(result_id: str) -> dict[str, Any]:
 async def get_signed_result(result_id: str) -> JSONResponse:
     """Return the result + HMAC-SHA256 signature for tamper detection.
 
-    The signature is computed over ``json.dumps(result, sort_keys=True)``
+    The signature is computed over
+    ``timestamp + "." + nonce + "." + json.dumps(result, sort_keys=True)``
     using either ``Settings.api_key`` or env ``IDP_RESULT_SIGNING_KEY``
     when no per-job secret is on file. Webhook consumers should verify
-    the signature before trusting the payload — protects against MITM
-    when the webhook URL is on a non-TLS path (dev only).
+    the signature (and the timestamp + nonce freshness) before trusting
+    the payload — protects against MITM when the webhook URL is on a
+    non-TLS path (dev only).
 
     Response shape::
 
         {
           "result": {...},
-          "signature": "sha256=<64-char hex>"
+          "signature": "sha256=<64-char hex>",
+          "timestamp": "<unix-epoch-seconds as string>",
+          "nonce": "<uuid4 hex, 16 chars>"
         }
+
+    Headers echo the same three values for clients that prefer headers
+    over a JSON body (``X-IDP-Signature``, ``X-IDP-Timestamp``,
+    ``X-IDP-Nonce``).
     """
     store = _require_results_store()
     stored = store.get(result_id)
@@ -617,11 +731,85 @@ async def get_signed_result(result_id: str) -> JSONResponse:
         )
     wire = _stored_to_wire(stored)
     body_bytes = _json.dumps(wire, sort_keys=True).encode("utf-8")
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex[:16]
     try:
-        sig = _sign_payload(body_bytes, secret=None)
+        sig = _sign_payload(
+            timestamp.encode("utf-8") + b"." +
+            nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret=None,
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    return JSONResponse(content={"result": wire, "signature": sig})
+    return JSONResponse(
+        content={"result": wire, "signature": sig,
+                 "timestamp": timestamp, "nonce": nonce},
+        headers={
+            _SIGNATURE_HEADER: sig,
+            _TIMESTAMP_HEADER: timestamp,
+            _NONCE_HEADER: nonce,
+        },
+    )
+
+
+class VerifySignatureRequest(BaseModel):
+    """Body for POST /verify_signature — replay-protected HMAC check."""
+
+    result: dict[str, Any]
+    signature: str  # "sha256=<64-char hex>"
+    timestamp: str  # unix-epoch-seconds as string
+    nonce: str  # uuid4 hex, 16 chars
+
+
+@app.post("/verify_signature", dependencies=[Depends(auth)])
+async def verify_signature(req_body: VerifySignatureRequest) -> dict[str, Any]:
+    """Verify a signed result envelope end-to-end.
+
+    Three checks, all must pass:
+      1. ``timestamp`` within ``IDP_SIGNATURE_MAX_AGE_SECONDS`` of now()
+         (set to 0 to disable — replay becomes possible).
+      2. ``nonce`` not previously seen (server-side bounded LRU).
+      3. ``signature`` matches HMAC-SHA256 over the canonical bytes.
+
+    Returns ``{"valid": true}`` on success. Returns ``{"valid": false,
+    "reason": "..."}`` on any check failure (status 200 either way so
+    callers don't have to handle two HTTP codes — they read the JSON).
+    """
+    s = _require_settings()
+    now = int(time.time())
+    try:
+        ts_int = int(req_body.timestamp)
+    except (TypeError, ValueError):
+        return {"valid": False, "reason": "timestamp not an integer"}
+    age = abs(now - ts_int)
+    if s.idp_signature_max_age_seconds > 0 and age > s.idp_signature_max_age_seconds:
+        return {
+            "valid": False,
+            "reason": f"timestamp too old or future-dated ({age}s > "
+                      f"{s.idp_signature_max_age_seconds}s)",
+        }
+
+    # Nonce freshness (replay protection)
+    if not _nonce_check_and_add(req_body.nonce, maxsize=s.idp_nonce_cache_maxsize):
+        return {"valid": False, "reason": "nonce already seen (replay?)"}
+
+    # Signature match
+    body_bytes = _json.dumps(req_body.result, sort_keys=True).encode("utf-8")
+    try:
+        expected = _sign_payload(
+            req_body.timestamp.encode("utf-8") + b"." +
+            req_body.nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret=None,
+        )
+    except RuntimeError as e:
+        return {"valid": False, "reason": f"server has no signing secret: {e}"}
+
+    # Constant-time compare on the full scheme+hex string
+    if not hmac.compare_digest(expected, req_body.signature):
+        return {"valid": False, "reason": "signature mismatch"}
+    return {"valid": True}
 
 
 # ---------------------------------------------------------------------------
@@ -804,17 +992,36 @@ def _sign_payload(payload_bytes: bytes, secret: str | None) -> str:
 def _post_webhook(url: str, stored: StoredResult, secret: str | None) -> None:
     """POST a stored result to a callback URL. Best-effort; logs on failure.
 
-    Signatures use HMAC-SHA256 over the JSON body. The X-IDP-Signature
-    header carries the ``sha256=<hex>`` value. Failures (timeout, 5xx,
-    connection refused) are logged at WARNING — they do NOT fail the job.
-    Webhook delivery is best-effort; the canonical result is at
-    /results/{id}.
+    Wire format:
+      - Body: JSON of the stored result (sort_keys=True)
+      - X-IDP-Signature: sha256=<hex> over (timestamp + "." + nonce + "." + body)
+      - X-IDP-Timestamp: unix-epoch-seconds at signature time
+      - X-IDP-Nonce: uuid4 hex (16 chars)
+      - X-IDP-Job-Id: stored.doc_id
+
+    Consumers should verify all three headers together (replay protection):
+      * timestamp must be within IDP_SIGNATURE_MAX_AGE_SECONDS of now()
+      * nonce must not have been seen before (server keeps a bounded LRU)
+      * signature must match HMAC-SHA256 over the canonical bytes
+
+    Failures (timeout, 5xx, connection refused) are logged at WARNING —
+    they do NOT fail the job. Webhook delivery is best-effort; the
+    canonical result is at /results/{id}.
     """
+    started = time.perf_counter()
+    outcome = "success"
     try:
         body_bytes = _json.dumps(
             _stored_to_wire(stored), sort_keys=True
         ).encode("utf-8")
-        sig = _sign_payload(body_bytes, secret)
+        timestamp = str(int(time.time()))
+        nonce = uuid.uuid4().hex[:16]
+        sig = _sign_payload(
+            timestamp.encode("utf-8") + b"." +
+            nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret,
+        )
         with httpx.Client(timeout=10.0) as client:
             r = client.post(
                 url,
@@ -822,6 +1029,8 @@ def _post_webhook(url: str, stored: StoredResult, secret: str | None) -> None:
                 headers={
                     "Content-Type": "application/json",
                     _SIGNATURE_HEADER: sig,
+                    _TIMESTAMP_HEADER: timestamp,
+                    _NONCE_HEADER: nonce,
                     "X-IDP-Job-Id": stored.doc_id,
                 },
             )
@@ -830,8 +1039,17 @@ def _post_webhook(url: str, stored: StoredResult, secret: str | None) -> None:
                     "webhook POST to %s returned %d: %s",
                     url, r.status_code, r.text[:200],
                 )
+                outcome = "http_error"
     except Exception as e:  # noqa: BLE001
         _log.warning("webhook delivery to %s failed: %s", url, e)
+        outcome = "network_error"
+    finally:
+        metrics.inc("async_callbacks_delivered", 1, outcome=outcome)
+        metrics.observe(
+            "async_callback_duration_seconds",
+            time.perf_counter() - started,
+            outcome=outcome,
+        )
 
 
 def _stored_to_wire(stored: StoredResult) -> dict[str, Any]:
