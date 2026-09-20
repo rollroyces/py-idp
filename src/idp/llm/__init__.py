@@ -24,6 +24,8 @@ from idp.llm.china import (
     get_china_backend,
     list_china_providers,
 )
+from idp.llm.ollama import OllamaBackend
+from idp.llm.tiered import TieredBackend, TieredBackendExhaustedError
 
 __all__ = [
     "AnthropicBackend",
@@ -32,7 +34,10 @@ __all__ = [
     "CompletionRequest",
     "Message",
     "MockBackend",
+    "OllamaBackend",
     "OpenAICompatBackend",
+    "TieredBackend",
+    "TieredBackendExhaustedError",
     "get_backend",
     "get_china_backend",
     "list_china_providers",
