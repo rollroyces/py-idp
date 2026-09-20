@@ -18,6 +18,13 @@ runs without any of them installed.
 
 A `MockBackend` ships for tests + reproducible eval, when the user
 has no API keys / hardware.
+
+Adding a new backend
+-------------------
+Subclass ``Backend`` and decorate it with ``register_backend("name")``.
+``name`` becomes the canonical lookup key for ``get_backend("name")``,
+and the class is then listed by ``list_backends()``. Aliases for
+backward compatibility go in ``_REGISTRY_ALIASES``.
 """
 from __future__ import annotations
 
@@ -71,8 +78,60 @@ class Backend(abc.ABC):
 
 
 # ---------------------------------------------------------------------------
+# Backend registry: decorator-based, extensible without editing get_backend().
+# ---------------------------------------------------------------------------
+_REGISTRY: dict[str, type[Backend]] = {}
+# Aliases map legacy / alternative names to a canonical registered name.
+# Pure cosmetic — get_backend() rewrites aliases before registry lookup.
+_REGISTRY_ALIASES: dict[str, str] = {
+    "openai": "openai-compat",
+    "compat": "openai-compat",
+    "ollama": "openai-compat",
+    "vllm": "openai-compat",
+    "lm-studio": "openai-compat",
+    "mock-ideal": "mock",
+    "mock-random": "mock",
+    "mock-omits": "mock",
+}
+
+
+def register_backend(name: str):
+    """Class decorator: register a Backend subclass under ``name``.
+
+    Usage::
+
+        @register_backend("my-llm")
+        class MyBackend(Backend):
+            name = "my-llm"
+            def complete(self, req): ...
+
+    After registration, ``get_backend("my-llm")`` returns an instance of
+    the class and ``list_backends()`` includes ``"my-llm"``.
+    """
+    def deco(cls: type[Backend]) -> type[Backend]:
+        _REGISTRY[name] = cls
+        # Set the canonical name on the class so the instance carries it.
+        # Subclass-defined `name` is preserved if already set to something
+        # other than the ABC default ("base").
+        if not getattr(cls, "name", None) or cls.name == "base":
+            cls.name = name
+        return cls
+    return deco
+
+
+def list_backends() -> list[str]:
+    """Sorted list of canonical backend names registered via ``register_backend``.
+
+    Does not include aliases, nor gated backends (slowmock, nanonets) which
+    require env-var opt-in. Useful for CLI help / docs.
+    """
+    return sorted(_REGISTRY.keys())
+
+
+# ---------------------------------------------------------------------------
 # Mock backend — deterministic, no network. Used by tests and the eval CI.
 # ---------------------------------------------------------------------------
+@register_backend("mock")
 class MockBackend(Backend):
     """Returns canned responses derived from the prompt.
 
@@ -143,6 +202,7 @@ class MockBackend(Backend):
 # HTTP backend — calls an OpenAI-compatible endpoint.
 # Works with vLLM, llama.cpp server, LM Studio, OpenAI, Together, Groq, etc.
 # ---------------------------------------------------------------------------
+@register_backend("openai-compat")
 class OpenAICompatBackend(Backend):
     """OpenAI-compatible chat-completions client."""
 
@@ -204,6 +264,7 @@ def _msg_to_openai(m: Message) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Anthropic (text + images via Claude Messages API).
 # ---------------------------------------------------------------------------
+@register_backend("anthropic")
 class AnthropicBackend(Backend):
     name = "anthropic"
 
@@ -302,9 +363,12 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
     provider's vision model if it has one. Pass `api_key=` or set the
     provider's env var.
 
-    The ``slowmock`` backend is only registered when ``IDP_ENABLE_SLOWMOCK=1``
+    The ``slowmock`` backend is only enabled when ``IDP_ENABLE_SLOWMOCK=1``
     is set in the environment. Production deployments never set this; it's
     intended for load-testing only.
+
+    To register a new backend without editing this file, use
+    ``@register_backend("name")`` (see module docstring).
     """
     if not name:
         name = "auto"
@@ -334,11 +398,9 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
                 "no LLM credentials found; falling back to 'mock' backend. "
                 "Set IDP_BACKEND=openai|anthropic|ollama|... to use a real LLM."
             )
-    # Mock variants
-    if name in ("mock", "mock-ideal", "mock-random", "mock-omits"):
-        mode = name.split("-", 1)[1] if "-" in name else "ideal"
-        return MockBackend(mode=mode)
-    # SlowMock for load testing — only enabled via env var
+    # Gated backends: slowmock (load-test only). Looked up by canonical
+    # name, NOT in the registry (gating is enforced here so production
+    # never accidentally enables them).
     if name == "slowmock":
         if os.environ.get("IDP_ENABLE_SLOWMOCK") != "1":
             raise ValueError(
@@ -377,12 +439,23 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
             api_key=kwargs.pop("api_key", None),
             timeout=kwargs.pop("timeout", 120.0),
         )
-    # International OpenAI-compat
-    if name in ("openai", "compat", "ollama", "vllm", "lm-studio"):
-        return OpenAICompatBackend(**kwargs)
-    if name == "anthropic":
-        return AnthropicBackend(**kwargs)
-    raise ValueError(f"Unknown backend: {name}")
+    # Aliases -> canonical name (preserves backward compat for "openai",
+    # "ollama", "vllm", "lm-studio", "mock-ideal", "mock-random", ...).
+    original_name = name
+    name = _REGISTRY_ALIASES.get(name, name)
+    # Registry lookup
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        known = sorted(set(_REGISTRY) | set(_REGISTRY_ALIASES))
+        raise ValueError(
+            f"Unknown backend: {original_name!r}. "
+            f"Registered: {known}"
+        )
+    # Honor the legacy mock-* alias by selecting mode from the original alias
+    # unless the caller already specified one.
+    if name == "mock" and "mode" not in kwargs and original_name.startswith("mock-"):
+        kwargs["mode"] = original_name.split("-", 1)[1]
+    return cls(**kwargs)
 
 
 # ---------------------------------------------------------------------------
