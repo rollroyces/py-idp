@@ -378,7 +378,17 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
             timeout=kwargs.pop("timeout", 120.0),
         )
     # International OpenAI-compat
-    if name in ("openai", "compat", "ollama", "vllm", "lm-studio"):
+    # Ollama is its own thing as of v0.4: it speaks Ollama's native
+    # /api/chat shape (not OpenAI-compatible chat-completions), and
+    # ``OllamaBackend`` talks to it directly over plain HTTP. The other
+    # aliases (``openai``, ``compat``, ``vllm``, ``lm-studio``) all
+    # DO speak OpenAI chat-completions so we keep them on the
+    # OpenAICompatBackend.
+    if name == "ollama":
+        from idp.llm.ollama import OllamaBackend as _OllamaBackend
+
+        return _OllamaBackend(**kwargs)
+    if name in ("openai", "compat", "vllm", "lm-studio"):
         return OpenAICompatBackend(**kwargs)
     if name == "anthropic":
         return AnthropicBackend(**kwargs)

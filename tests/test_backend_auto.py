@@ -55,8 +55,11 @@ def test_auto_with_anthropic_key_picks_anthropic(monkeypatch, clean_env):
 def test_auto_with_ollama_host_picks_ollama(monkeypatch, clean_env):
     monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
     backend = clean_env.get_backend("auto")
-    # Ollama also dispatches through OpenAICompatBackend
-    assert backend.name == "openai-compat"
+    # v0.4: Ollama now has its own backend (OllamaBackend) that talks to
+    # Ollama's native /api/chat endpoint over plain HTTP. The
+    # factory resolves name="ollama" → OllamaBackend.
+    assert backend.name == "ollama"
+    assert clean_env.get_backend("ollama").name == "ollama"
 
 
 def test_explicit_idp_backend_overrides_autodetect(monkeypatch, clean_env):

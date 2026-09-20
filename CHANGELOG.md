@@ -5,6 +5,50 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [Unreleased] — v0.4
+
+### Added
+
+* **`TieredBackend` (v0.4 P2)** — `src/idp/llm/tiered.py`. A drop-in
+  `Backend` subclass that routes every `complete()` call to a cheap
+  local model first and only escalates to an expensive model when
+  the cheap response fails JSON validation or has per-field
+  confidence below `ambiguity_threshold` (default 0.7, per the D2
+  spec). Raises `TieredBackendExhaustedError` with both raw outputs
+  attached if both tiers fail. Existing `Pipeline` callers see no
+  change — assign `Pipeline(backend=TieredBackend(...))` and go.
+  Tested via `tests/test_tiered.py` (14 tests).
+* **`OllamaBackend` (v0.4 P2)** — `src/idp/llm/ollama.py`. Thin
+  `Backend` subclass over the local Ollama HTTP API at
+  `http://localhost:11434`. Uses `httpx` (already a core dep),
+  no `ollama` SDK required. Honors `OLLAMA_MODEL` and `OLLAMA_HOST`
+  env vars; `is_multimodal` is True for vision-capable tags.
+  `get_backend("ollama")` now resolves to this class instead of
+  `OpenAICompatBackend` (Ollama speaks its own `/api/chat` shape).
+  Tested via `tests/test_ollama_backend.py` (15 tests, all using a
+  mocked `httpx.MockTransport`).
+* **`examples/06_tiered_pipeline.py`** — the headline v0.4 cost win
+  example: `TieredBackend(OllamaBackend(), AnthropicBackend())` in
+  one `Pipeline` setup.
+* **`tests/test_tiered.py`** (14 tests) — covers routing-to-cheap,
+  escalation on low-confidence / parse-failure, threshold-boundary
+  behaviour, both-tiers-exhausted error contract, pipeline
+  transparency, and defensive constructor validation.
+* **`tests/test_ollama_backend.py`** (15 tests) — covers the wire
+  shape, response parsing, error surfaces, env-var resolution, and
+  multimodal tag detection — all against a mocked `httpx.MockTransport`.
+
+### Not in v0.4 (explicit non-goals, deferred to v0.5)
+
+* Ollama streaming response handling (`stream=true`).
+* Per-field confidence escalation (only the whole-response
+  acceptance test is in v0.4).
+* Rule-based / regex pre-pass as a third tier ahead of the cheap
+  LLM.
+* Tiered caching (re-run the cheap tier vs serve from cache) — for
+  v0.4 compose TieredBackend with the existing
+  `idp.reliability.CachingBackend` instead.
+
 ## [0.3.8] — 2026-09-17 — coverage push to 92%, PIL 10+ bug fix
 
 ### Fixed
