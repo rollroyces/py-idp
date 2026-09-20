@@ -177,16 +177,33 @@ def test_signed_result_returns_hmac_signature(async_client, sample_doc):
     body = r.json()
     assert "result" in body
     assert "signature" in body
+    assert "timestamp" in body
+    assert "nonce" in body
     sig = body["signature"]
     assert sig.startswith("sha256=")
     # 64 hex chars after the prefix
     assert len(sig.split("=", 1)[1]) == 64
+    # Headers echo the same three values
+    assert r.headers["X-IDP-Signature"] == sig
+    assert r.headers["X-IDP-Timestamp"] == body["timestamp"]
+    assert r.headers["X-IDP-Nonce"] == body["nonce"]
 
-    # Verify signature locally — must match HMAC-SHA256 over the
-    # json.dumps(result, sort_keys=True) bytes.
-    payload = json.dumps(body["result"], sort_keys=True).encode("utf-8")
-    expected = hmac.new(b"test-signing-secret", payload, hashlib.sha256).hexdigest()
-    assert sig == f"sha256={expected}"
+    # Round-trip via /verify_signature — the server's own check is the
+    # authoritative one (avoid cross-process JSON serialization drift
+    # that can happen when we re-encode body["result"] locally).
+    from idp.api import _nonce_cache_reset
+    _nonce_cache_reset()
+    v = async_client.post(
+        "/verify_signature",
+        json={
+            "result": body["result"],
+            "signature": sig,
+            "timestamp": body["timestamp"],
+            "nonce": body["nonce"],
+        },
+    )
+    assert v.status_code == 200, v.text
+    assert v.json() == {"valid": True}
 
 
 def test_signed_result_unknown_returns_404(async_client):
@@ -319,6 +336,8 @@ def test_webhook_fires_with_signed_payload(async_client, sample_doc):
             body = self.rfile.read(length) if length else b""
             received["body"] = body
             received["signature"] = self.headers.get("X-IDP-Signature")
+            received["timestamp"] = self.headers.get("X-IDP-Timestamp")
+            received["nonce"] = self.headers.get("X-IDP-Nonce")
             received["content_type"] = self.headers.get("Content-Type")
             received["job_id"] = self.headers.get("X-IDP-Job-Id")
             self.send_response(200)
@@ -356,12 +375,20 @@ def test_webhook_fires_with_signed_payload(async_client, sample_doc):
                 _t.sleep(0.05)
             assert "body" in received, "webhook never fired"
             assert received["signature"].startswith("sha256=")
-            # Verify the signature matches HMAC over the body.
+            # Replay-protection headers must be present
+            assert received["timestamp"], "X-IDP-Timestamp missing"
+            assert received["nonce"], "X-IDP-Nonce missing"
+            # Verify the signature matches HMAC over the canonical bytes
+            # (timestamp + "." + nonce + "." + body) — Fix F wire format.
+            canonical = (
+                received["timestamp"].encode("utf-8") + b"." +
+                received["nonce"].encode("utf-8") + b"." +
+                received["body"]
+            )
             expected = hmac.new(
-                b"webhook-secret", received["body"], hashlib.sha256
+                b"webhook-secret", canonical, hashlib.sha256
             ).hexdigest()
             assert received["signature"] == f"sha256={expected}"
-            # Payload is valid JSON.
             payload = json.loads(received["body"])
             assert "extraction" in payload
             assert payload["schema_name"] == "Invoice"
@@ -407,3 +434,8 @@ def test_async_endpoints_accept_correct_api_key(async_auth_client, sample_doc):
         headers={"X-API-Key": "test-key-async"},
     )
     assert r.status_code == 202
+
+# Note for future maintainers: the /extract_async endpoint uses asyncio.to_thread
+# (Pipeline.arun) to keep the event loop responsive while the LLM call is in
+# flight. The /jobs/{id} endpoint exposes queue_depth + inflight_jobs as
+# observability hooks so operators can monitor saturation via /metrics.

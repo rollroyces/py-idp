@@ -37,6 +37,19 @@ class Settings:
     api_key: str | None = None
     api_key_required: bool = True
     rate_limit_per_minute: int = 60  # 0 = unlimited
+    # /extract_async-specific limits. Async jobs are heavier than sync
+    # /extract (they enqueue work the server runs off-loop), so we keep
+    # the per-minute budget smaller by default. Set to 0 to disable.
+    idp_async_rate_limit_per_minute: int = 10  # 0 = unlimited
+    # Max concurrent in-flight jobs in the InProcessQueue. Caps torch/LLM
+    # usage so a flood of submissions can't exhaust the thread pool.
+    idp_async_max_concurrent: int = 4  # 0 = unbounded (not recommended)
+    # HMAC signature freshness: server rejects signed payloads whose
+    # embedded timestamp is older than this many seconds (replay window).
+    # Set to 0 to disable (no freshness check — not recommended).
+    idp_signature_max_age_seconds: int = 300
+    # Bounded LRU cache size for seen nonces (replay protection).
+    idp_nonce_cache_maxsize: int = 10_000
 
     # Storage
     storage_backend: str = "memory"  # memory | json | sql
@@ -84,6 +97,10 @@ class Settings:
         kwargs["api_key"] = e.get("IDP_API_KEY") or None
         kwargs["api_key_required"] = _validate_bool("IDP_API_KEY_REQUIRED", e.get("IDP_API_KEY_REQUIRED"), default=s.api_key_required)
         kwargs["rate_limit_per_minute"] = _validate_int("IDP_RATE_LIMIT_PER_MINUTE", e.get("IDP_RATE_LIMIT_PER_MINUTE"), default=s.rate_limit_per_minute, min_v=0, max_v=1_000_000)
+        kwargs["idp_async_rate_limit_per_minute"] = _validate_int("IDP_ASYNC_RATE_LIMIT_PER_MINUTE", e.get("IDP_ASYNC_RATE_LIMIT_PER_MINUTE"), default=s.idp_async_rate_limit_per_minute, min_v=0, max_v=1000)
+        kwargs["idp_async_max_concurrent"] = _validate_int("IDP_ASYNC_MAX_CONCURRENT", e.get("IDP_ASYNC_MAX_CONCURRENT"), default=s.idp_async_max_concurrent, min_v=0, max_v=1000)
+        kwargs["idp_signature_max_age_seconds"] = _validate_int("IDP_SIGNATURE_MAX_AGE_SECONDS", e.get("IDP_SIGNATURE_MAX_AGE_SECONDS"), default=s.idp_signature_max_age_seconds, min_v=0, max_v=86400)
+        kwargs["idp_nonce_cache_maxsize"] = _validate_int("IDP_NONCE_CACHE_MAXSIZE", e.get("IDP_NONCE_CACHE_MAXSIZE"), default=s.idp_nonce_cache_maxsize, min_v=1, max_v=1_000_000)
 
         # Storage
         kwargs["storage_backend"] = _validate_choice("IDP_STORAGE_BACKEND", e.get("IDP_STORAGE_BACKEND"), choices=("memory", "json", "sql"), default=s.storage_backend)
