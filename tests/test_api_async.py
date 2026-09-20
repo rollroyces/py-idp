@@ -434,3 +434,8 @@ def test_async_endpoints_accept_correct_api_key(async_auth_client, sample_doc):
         headers={"X-API-Key": "test-key-async"},
     )
     assert r.status_code == 202
+
+# Note for future maintainers: the /extract_async endpoint uses asyncio.to_thread
+# (Pipeline.arun) to keep the event loop responsive while the LLM call is in
+# flight. The /jobs/{id} endpoint exposes queue_depth + inflight_jobs as
+# observability hooks so operators can monitor saturation via /metrics.
