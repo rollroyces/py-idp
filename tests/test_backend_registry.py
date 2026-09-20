@@ -227,3 +227,4 @@ def test_decorator_does_not_clobber_explicit_class_name(clean_env):
     # ...but the class's name attribute reflects the developer's choice
     assert Custom.name == "i-set-this-myself"
     assert isinstance(inst1, Custom)
+
