@@ -24,13 +24,18 @@ multi-tenant auth (these are deployment-level concerns).
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import hmac
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,7 +54,9 @@ from idp.errors import (
 )
 from idp.metrics import metrics
 from idp.pipeline.pipeline import Pipeline
+from idp.queue.jobs import InProcessQueue, Job, JobStatus
 from idp.ratelimit import RateLimiter
+from idp.storage.store import InMemoryStorage, StoredResult
 from idp.templates import TemplateRegistry
 
 # Module-level logger; configured at lifespan startup.
@@ -58,9 +65,13 @@ _settings: Settings | None = None
 _rate_limiter: RateLimiter | None = None
 _upload_dir: Path | None = None
 _template_registry: TemplateRegistry | None = None
+_job_queue: InProcessQueue | None = None
+_results_store: InMemoryStorage | None = None
 
 # Request-ID header name (lowercase; FastAPI normalizes).
 _REQUEST_ID_HEADER = "x-request-id"
+_SIGNATURE_HEADER = "X-IDP-Signature"
+_SIGNATURE_SCHEME = "sha256"
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +164,7 @@ def auth(request: Request) -> None:
 async def lifespan(app: FastAPI):
     """Configure logging, validate settings, prep upload dir, load templates."""
     global _settings, _rate_limiter, _upload_dir, _template_registry
+    global _job_queue, _results_store
 
     # Load settings (raises ConfigurationError -> startup aborts with 500)
     try:
@@ -191,14 +203,78 @@ async def lifespan(app: FastAPI):
         raise ConfigurationError(f"template load failed: {e}") from e
     _log.info("loaded %d template(s) from %s", len(_template_registry), template_dir)
 
+    # Async submission infrastructure: in-process job queue + result store.
+    # The queue runs pipeline.arun() off the event-loop thread that serves
+    # /extract_async. Each job gets its own asyncio.run() call so the worker's
+    # event loop is independent. The results store is in-memory only —
+    # production deployments should swap it for SqlStorage via the existing
+    # Settings.storage_backend knob (future P-tier work).
+    _results_store = InMemoryStorage()
+
+    def _job_runner(job: Job) -> None:
+        """Worker tick: load doc, run pipeline, persist result, fire webhook.
+
+        Synchronous wrapper (matches InProcessQueue's runner contract).
+        Pipeline.run() is the canonical sync entry point; arun is only
+        added in the P0 audit branch (audit/p0-fixes-v0.3.9). On a
+        P0-equipped checkout, prefer arun when present so the request
+        loop isn't blocked.
+        """
+        schema_name = job.schema_name
+        backend_name = job.backend_name
+        doc = Document.from_path(job.doc_path)
+        pipeline = Pipeline(backend=backend_name, schema=schema_name)
+
+        def _run_sync() -> Any:
+            arun = getattr(pipeline, "arun", None)
+            if arun is None:
+                # Pre-P0 fallback: synchronous Pipeline.run.
+                return pipeline.run(doc)
+            # P0+: arun exists; drive it on a private event loop so we
+            # don't collide with the FastAPI request loop. The worker
+            # is itself an asyncio task, so we cannot call asyncio.run().
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(arun(doc))
+            finally:
+                loop.close()
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            try:
+                res = ex.submit(_run_sync).result()
+            except Exception as e:  # noqa: BLE001
+                job.error = str(e)
+                return
+
+        stored = _pipeline_result_to_stored(res, job)
+        if _results_store is not None:
+            result_id = _results_store.put(stored)
+            job.result_id = result_id
+            job.extra["result_id"] = result_id
+            # Fire the webhook (best-effort; do not raise if it fails).
+            cb = job.extra.get("callback_url")
+            cb_secret = job.extra.get("callback_secret")
+            if cb:
+                _post_webhook(cb, stored, cb_secret)
+
+    _job_queue = InProcessQueue(runner=_job_runner)
+    await _job_queue.start()
+    _log.info("async job queue started (in-process)")
+
     yield
 
     # Shutdown: clean up, log final metrics
     _log.info("py-idp API shutting down. metrics: %s", metrics.snapshot())
+    if _job_queue is not None:
+        await _job_queue.stop()
     _settings = None
     _rate_limiter = None
     _upload_dir = None
     _template_registry = None
+    _job_queue = None
+    _results_store = None
 
 
 app = FastAPI(
@@ -401,6 +477,154 @@ async def extract_sync(
 
 
 # ---------------------------------------------------------------------------
+# Async /extract_async + webhook + signed result
+# ---------------------------------------------------------------------------
+@app.post(
+    "/extract_async",
+    dependencies=[Depends(auth)],
+)
+async def extract_async(
+    file: UploadFile,
+    schema_name: str | None = Form(default=None),
+    backend: str | None = Form(default=None),
+    callback_url: str | None = Form(default=None),
+    callback_secret: str | None = Form(default=None),
+) -> JSONResponse:
+    """Submit an extraction job. Returns 202 Accepted immediately.
+
+    Form fields:
+      - ``schema_name``     optional — same semantics as /extract.
+      - ``backend``         optional — same semantics as /extract.
+      - ``callback_url``    optional — when the job finishes, the server
+                            POSTs the result JSON to this URL. Must be
+                            ``https://<hostname>`` or ``http://localhost``
+                            / ``http://127.0.0.1`` (SSRF guard; anything
+                            else returns 400).
+      - ``callback_secret`` optional — HMAC-SHA256 signing secret for the
+                            webhook payload. If omitted, the server's
+                            ``Settings.api_key`` (or env
+                            ``IDP_RESULT_SIGNING_KEY``) is used.
+
+    Response shape::
+
+        {
+          "job_id": "<16-char id>",
+          "status_url": "/jobs/<job_id>",
+          "result_url": "/results/<result_id>"
+        }
+
+    Note: ``result_url`` is populated only after the job runs and writes
+    the StoredResult; before that, GETting the result_url returns 404.
+    """
+    s = _require_settings()
+    raw = await _read_capped(file, s.max_upload_bytes)
+    upload_dir = _require_upload_dir()
+    dst = _safe_upload_path(upload_dir, file.filename or "")
+    dst.write_bytes(raw)
+
+    if callback_url:
+        _ssrf_check_callback_url(callback_url)
+
+    # Template routing mirrors /extract
+    reg = _require_template_registry()
+    if schema_name is None:
+        match = reg.find_for_filename(filename=dst.name, mime=file.content_type)
+        if match is not None:
+            schema_name = match.schema
+
+    queue = _require_job_queue()
+    # InProcessQueue.submit takes (doc_path, schema_name, backend_name).
+    # We pass callback info via Job.extra so the runner can fire the webhook.
+    job = await queue.submit(
+        str(dst),
+        schema_name or "Invoice",
+        backend or s.default_backend,
+    )
+    if callback_url:
+        job.extra["callback_url"] = callback_url
+    if callback_secret:
+        job.extra["callback_secret"] = callback_secret
+
+    metrics.inc("async_submissions", 1, schema=schema_name or "_none")
+    return JSONResponse(
+        status_code=202,
+        content={
+            "job_id": job.id,
+            "status_url": f"/jobs/{job.id}",
+            "result_url": f"/results/{job.result_id}" if job.result_id else None,
+        },
+        headers={"Location": f"/jobs/{job.id}"},
+    )
+
+
+@app.get("/jobs/{job_id}", dependencies=[Depends(auth)])
+async def get_job_status(job_id: str) -> dict[str, Any]:
+    """Return job status (pending / running / succeeded / failed)."""
+    queue = _require_job_queue()
+    job = await queue.status(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job_id {job_id!r}")
+    payload: dict[str, Any] = {
+        "job_id": job.id,
+        "status": job.status.value,
+        "schema_name": job.schema_name,
+        "backend_name": job.backend_name,
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "finished_at": job.finished_at,
+        "error": job.error,
+    }
+    if job.result_id:
+        payload["result_id"] = job.result_id
+        payload["result_url"] = f"/results/{job.result_id}"
+    return payload
+
+
+@app.get("/results/{result_id}", dependencies=[Depends(auth)])
+async def get_result(result_id: str) -> dict[str, Any]:
+    """Return a stored extraction result as JSON."""
+    store = _require_results_store()
+    stored = store.get(result_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail=f"unknown result_id {result_id!r}"
+        )
+    return _stored_to_wire(stored)
+
+
+@app.post("/results/{result_id}/signed", dependencies=[Depends(auth)])
+async def get_signed_result(result_id: str) -> JSONResponse:
+    """Return the result + HMAC-SHA256 signature for tamper detection.
+
+    The signature is computed over ``json.dumps(result, sort_keys=True)``
+    using either ``Settings.api_key`` or env ``IDP_RESULT_SIGNING_KEY``
+    when no per-job secret is on file. Webhook consumers should verify
+    the signature before trusting the payload — protects against MITM
+    when the webhook URL is on a non-TLS path (dev only).
+
+    Response shape::
+
+        {
+          "result": {...},
+          "signature": "sha256=<64-char hex>"
+        }
+    """
+    store = _require_results_store()
+    stored = store.get(result_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail=f"unknown result_id {result_id!r}"
+        )
+    wire = _stored_to_wire(stored)
+    body_bytes = _json.dumps(wire, sort_keys=True).encode("utf-8")
+    try:
+        sig = _sign_payload(body_bytes, secret=None)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return JSONResponse(content={"result": wire, "signature": sig})
+
+
+# ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
 def _require_settings() -> Settings:
@@ -421,9 +645,245 @@ def _require_template_registry() -> TemplateRegistry:
     return _template_registry
 
 
+# Filenames can carry path-traversal payloads (e.g. "../etc/passwd").
+# Anything that isn't [A-Za-z0-9._-] is replaced with an underscore so the
+# resolved path can never escape the upload directory. We also pin the
+# whitelist of accepted extensions BEFORE writing anything to disk —
+# an attacker uploading ".exe" or "../" gets a 415/400, not a silent write.
+# On Linux/POSIX backslash is a legal filename char; on Windows it is a
+# path separator. Stripping it is defence-in-depth for cross-platform safety.
+_SAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+_ALLOWED_UPLOAD_EXTENSIONS: frozenset[str] = frozenset({
+    ".pdf", ".txt", ".md", ".markdown", ".html", ".htm", ".eml",
+    ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp",
+})
+
+
+def _sanitize_upload_filename(raw: str | None) -> str:
+    """Return a filename safe to join with the upload dir.
+
+    Rules (in order):
+      1. ``None`` / empty / pure-whitespace -> ``"upload"``.
+      2. Strip directory components. On POSIX ``Path(name).name``
+         strips up to the last ``/``; on Windows it would also strip
+         up to the last ``\\``. We do an extra ``replace("\\", ...)``
+         before to ensure cross-platform safety even when the running
+         Python reports the wrong platform.
+      3. Replace any character outside [A-Za-z0-9._-] with ``_``.
+      4. Reject empty results or names that start with ``.`` (dotfiles).
+      5. Cap at 255 chars (POSIX filename limit).
+    """
+    name = (raw or "").strip()
+    if not name:
+        return "upload"
+    # Cross-platform: strip both separator styles. ``Path(name).name``
+    # only strips the platform-native one.
+    name = name.replace("\\", "/")
+    name = Path(name).name  # strip directory components
+    name = _SAFE_NAME_CHARS.sub("_", name)
+    if not name or name.startswith("."):
+        name = "upload_" + name
+    return name[:255]
+
+
+def _safe_upload_path(upload_dir: Path, filename: str) -> Path:
+    """Return a ``Path`` guaranteed to live inside ``upload_dir``.
+
+    Raises ``HTTPException(400)`` if the resolved path escapes the
+    directory (defence in depth — sanitization should already prevent
+    this, but a symlinked ``upload_dir`` would bypass it).
+    Raises ``HTTPException(415)`` for unsupported extensions.
+    """
+    safe = _sanitize_upload_filename(filename)
+    candidate = (upload_dir / safe).resolve()
+    upload_root = upload_dir.resolve()
+    if not candidate.is_relative_to(upload_root):
+        raise HTTPException(status_code=400, detail="invalid filename")
+    ext = candidate.suffix.lower()
+    if ext not in _ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported file type: {ext!r}; allowed: "
+                   f"{sorted(_ALLOWED_UPLOAD_EXTENSIONS)}",
+        )
+    return candidate
+
+
 def _request_id(request: Request) -> str:
     """Pull the request id off request.state, defaulting to '-' if absent."""
     return getattr(request.state, "request_id", "-")
+
+
+# ---------------------------------------------------------------------------
+# Async /extract_async helpers
+# ---------------------------------------------------------------------------
+import json as _json  # local alias to avoid shadowing issues elsewhere
+
+
+def _ssrf_check_callback_url(url: str) -> None:
+    """Reject callback URLs that target internal networks.
+
+    Allowed:
+      * ``https://<anywhere>`` — production webhook target.
+      * ``http://localhost`` or ``http://127.0.0.1`` — local dev/loopback
+        for testing the webhook end-to-end without TLS.
+
+    Rejected: anything else on http (attacker-controlled port-forward to
+    an internal service), private/loopback IPs on https (rare; usually
+    misconfigured), and any non-http(s) scheme (file://, gopher://, ...).
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"callback_url scheme {scheme!r} not allowed (must be http/https)",
+        )
+    host = (parsed.hostname or "").lower().strip()
+    if scheme == "http":
+        # Only allow loopback for http (localhost / 127.0.0.1 / ::1).
+        # We don't resolve here — just string-compare, to avoid DNS-rebind
+        # via /etc/hosts. The hostname check is intentionally simple.
+        if host not in ("localhost", "127.0.0.1", "::1"):
+            raise HTTPException(
+                status_code=400,
+                detail="callback_url http:// only allowed for localhost / 127.0.0.1",
+            )
+    else:  # https
+        # Reject if the hostname IS a private/loopback address.
+        import ipaddress
+
+        try:
+            ip = ipaddress.ip_address(host)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"callback_url https target {host!r} resolves to a "
+                           "private/loopback IP",
+                )
+        except ValueError:
+            # Not an IP literal — it's a DNS name. We trust it; production
+            # deployments terminate the public DNS at the ingress.
+            pass
+
+
+def _sign_payload(payload_bytes: bytes, secret: str | None) -> str:
+    """Return ``sha256=<hex>`` HMAC signature for the payload.
+
+    ``secret`` is the per-job callback secret when provided; otherwise we
+    fall back to ``Settings.api_key`` or the env var
+    ``IDP_RESULT_SIGNING_KEY``. The scheme prefix matches what consumers
+    typically expect (Stripe-style ``t=...,v1=...`` simplified to just
+    ``sha256=<hex>``).
+    """
+    if not secret:
+        s = _require_settings()
+        secret = s.api_key or os.environ.get("IDP_RESULT_SIGNING_KEY") or ""
+    if not secret:
+        # No signing material available — refuse rather than emit a weak
+        # signature. Webhooks still fire (callers can ignore unsigned), but
+        # /results/{id}/signed returns 503 because there's nothing to sign.
+        raise RuntimeError(
+            "no signing secret configured (set IDP_API_KEY or "
+            "IDP_RESULT_SIGNING_KEY in the env)"
+        )
+    digest = hmac.new(
+        secret.encode("utf-8"), payload_bytes, hashlib.sha256
+    ).hexdigest()
+    return f"{_SIGNATURE_SCHEME}={digest}"
+
+
+def _post_webhook(url: str, stored: StoredResult, secret: str | None) -> None:
+    """POST a stored result to a callback URL. Best-effort; logs on failure.
+
+    Signatures use HMAC-SHA256 over the JSON body. The X-IDP-Signature
+    header carries the ``sha256=<hex>`` value. Failures (timeout, 5xx,
+    connection refused) are logged at WARNING — they do NOT fail the job.
+    Webhook delivery is best-effort; the canonical result is at
+    /results/{id}.
+    """
+    try:
+        body_bytes = _json.dumps(
+            _stored_to_wire(stored), sort_keys=True
+        ).encode("utf-8")
+        sig = _sign_payload(body_bytes, secret)
+        with httpx.Client(timeout=10.0) as client:
+            r = client.post(
+                url,
+                content=body_bytes,
+                headers={
+                    "Content-Type": "application/json",
+                    _SIGNATURE_HEADER: sig,
+                    "X-IDP-Job-Id": stored.doc_id,
+                },
+            )
+            if r.status_code >= 400:
+                _log.warning(
+                    "webhook POST to %s returned %d: %s",
+                    url, r.status_code, r.text[:200],
+                )
+    except Exception as e:  # noqa: BLE001
+        _log.warning("webhook delivery to %s failed: %s", url, e)
+
+
+def _stored_to_wire(stored: StoredResult) -> dict[str, Any]:
+    """Serialize a StoredResult to a JSON-safe dict (id + extraction)."""
+    return {
+        "id": stored.id,
+        "doc_id": stored.doc_id,
+        "schema_name": stored.schema_name,
+        "backend_name": stored.backend_name,
+        "mode": stored.mode,
+        "classification": stored.classification,
+        "extraction": stored.extraction,
+        "confidence": stored.confidence,
+        "validation": stored.validation,
+        "source_path": stored.source_path,
+        "created_at": stored.created_at,
+        "reviewed": stored.reviewed,
+    }
+
+
+def _pipeline_result_to_stored(
+    res: Any, job: Job
+) -> StoredResult:
+    """Convert a PipelineResult into a StoredResult for the store + webhook."""
+    import time as _time
+
+    doc = res.document
+    return StoredResult(
+        id="",  # assigned on put()
+        doc_id=job.id,
+        schema_name=res.schema_name or job.schema_name,
+        backend_name=res.backend_name or job.backend_name,
+        mode=res.mode,
+        classification=res.classification,
+        extraction=doc.extraction or {},
+        confidence=res.confidence,
+        validation=doc.validation,
+        source_path=job.doc_path,
+        created_at=_time.time(),
+    )
+
+
+def _require_job_queue() -> InProcessQueue:
+    if _job_queue is None:
+        raise HTTPException(status_code=503, detail="async: job queue not ready")
+    return _job_queue
+
+
+def _require_results_store() -> InMemoryStorage:
+    if _results_store is None:
+        raise HTTPException(status_code=503, detail="async: results store not ready")
+    return _results_store
 
 
 async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:

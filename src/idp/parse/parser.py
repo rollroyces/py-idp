@@ -198,15 +198,69 @@ def get_parser(name: str = "auto") -> Parser:
     raise ValueError(f"Unknown parser: {name}")
 
 
+def _count_pdf_pages(path: str | Path) -> int | None:
+    """Cheap page count for a PDF file. Returns None if pdfplumber isn't installed.
+
+    Best-effort: if pdfplumber is unavailable (the user installed only the
+    ``docling`` extra), we can't count cheaply — ``pypdf`` and ``fitz`` aren't
+    in our dep tree and we don't want to pull in a new dep just for the count.
+    In that case we return None and the caller should skip the cap check
+    rather than block the user. The cap is defense-in-depth, not a hard
+    security boundary (a 1M-page PDF that gets past this still gets parsed
+    — but Docling is itself resource-bound).
+
+    Cost: pdfplumber opens the file and reads the page tree without
+    extracting text. On a 1000-page PDF this is ~50ms vs. minutes for the
+    full ``.parse()`` call. Worth it.
+    """
+    try:
+        import pdfplumber  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            return len(pdf.pages)
+    except Exception as e:  # noqa: BLE001
+        # Corrupt / encrypted / non-PDF: surface to caller so they can
+        # decide whether to error out or proceed.
+        log.debug("pdfplumber page count failed for %s: %s", path, e)
+        return None
+
+
 def parse_document(doc: Document, parser: Parser | None = None) -> Document:
     """Run a parser and attach the result onto the Document.
 
     If `parser` is None, auto-resolves by file extension (NOT just
     'try docling first'): plain text files go to PlainTextParser,
     pdfs to docling > pdfplumber.
+
+    For PDFs we enforce ``Settings.max_pdf_pages`` (env
+    ``IDP_MAX_PDF_PAGES``, default 100) BEFORE invoking the parser — the
+    count is a cheap pdfplumber-only operation and prevents the
+    expensive parser (Docling) from running on a multi-thousand-page
+    document that will exhaust memory. When pdfplumber is not installed
+    (rare — most users have it transitively via docling), the check is
+    skipped silently.
     """
     if parser is None:
         parser = _auto_pick(doc)
+    # Cheap page-count gate: only for PDFs, only if the cap is enabled.
+    if doc.extension == "pdf":
+        try:
+            from idp.config import Settings as _Settings
+
+            max_pages = _Settings.load().max_pdf_pages
+        except Exception:  # noqa: BLE001
+            max_pages = 100  # fall back to the documented default
+        if max_pages > 0:
+            page_count = _count_pdf_pages(doc.source_path)
+            if page_count is not None and page_count > max_pages:
+                from idp.errors import DocumentParseError
+
+                raise DocumentParseError(
+                    f"PDF has {page_count} pages, exceeds IDP_MAX_PDF_PAGES={max_pages}. "
+                    f"Increase the limit or split the document."
+                )
     try:
         result = parser.parse(doc.source_path)
     except Exception as e:

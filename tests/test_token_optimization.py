@@ -179,9 +179,11 @@ def test_build_messages_caps_text_to_max_tokens():
 
     # Extract just the document content from the user message
     user_content = msgs[1].content
-    doc_marker = "Document content:\n\"\"\"\n"
+    # Prompt-injection defense (P1 audit): document content is wrapped in
+    # <document>...</document> XML tags, NOT triple-backtick fences.
+    doc_marker = "Document content:\n<document>\n"
     assert doc_marker in user_content
-    doc_text = user_content.split(doc_marker, 1)[1].split("\n\"\"\"", 1)[0]
+    doc_text = user_content.split(doc_marker, 1)[1].split("\n</document>", 1)[0]
 
     # Should be well under the cap
     tokens = len(enc.encode(doc_text))

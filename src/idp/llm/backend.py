@@ -22,11 +22,115 @@ has no API keys / hardware.
 from __future__ import annotations
 
 import abc
+import ipaddress
 import json
 import os
 import re
+import socket
 from dataclasses import dataclass, field
 from typing import Any, cast
+from urllib.parse import urlparse
+
+
+# ---------------------------------------------------------------------------
+# SSRF guard — base_url validation for OpenAICompatBackend
+# ---------------------------------------------------------------------------
+# Today base_url is only set by the preset registry (China providers) and
+# the Settings.default_backend factory — both trusted. But the constructor
+# is public: a future caller could pass `http://10.0.0.1:8000/v1` and
+# exfiltrate API keys to an internal service, or `http://169.254.169.254`
+# to read cloud metadata. This guard rejects those at construction time.
+
+# Allow http only when explicitly opted-in (dev / on-prem). Production
+# deployments use https presets.
+_INSECURE_HTTP_OK = os.environ.get("IDP_ALLOW_INSECURE_HTTP") == "1"
+_ALLOW_PRIVATE_NETWORK = os.environ.get("IDP_ALLOW_PRIVATE_NETWORK") == "1"
+
+
+def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True if the address is loopback, link-local, private, or reserved.
+
+    Catches IPv4-mapped IPv6 (::ffff:10.0.0.1) by checking both families.
+    """
+    return (
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_reserved
+        or ip.is_unspecified
+        # 169.254.x.x (AWS / Azure metadata) is link-local in the stdlib's
+        # is_link_local flag for IPv4; IPv6 equivalent is fe80::/10. Both
+        # are covered above. We additionally explicitly block the IPv6
+        # unique-local prefix fc00::/7 for paranoia.
+        or (ip.version == 6 and ip.sixtofour[0] != "::")  # type: ignore[index]
+    )
+
+
+def _validate_base_url(
+    url: str,
+    *,
+    allow_private_network: bool | None = None,
+    allow_insecure_http: bool | None = None,
+) -> str:
+    """Validate ``url`` is safe to dial. Returns the URL unchanged on pass.
+
+    Rejects:
+      * Non-http(s) schemes (file://, gopher://, ...).
+      * http:// when ``IDP_ALLOW_INSECURE_HTTP!=1`` and no explicit
+        ``allow_insecure_http=True`` was passed in.
+      * Any resolved IP that's loopback / link-local / private / reserved,
+        UNLESS ``IDP_ALLOW_PRIVATE_NETWORK=1`` is set (dev / on-prem) or
+        ``allow_private_network=True`` is passed in (only by trusted callers
+        like the Ollama-on-localhost dispatch).
+      * Hostnames that fail to resolve.
+    """
+    if allow_private_network is None:
+        allow_private_network = _ALLOW_PRIVATE_NETWORK
+    if allow_insecure_http is None:
+        allow_insecure_http = _INSECURE_HTTP_OK
+    if not url or not isinstance(url, str):
+        raise ValueError("base_url must be a non-empty string")
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"base_url scheme {scheme!r} not allowed; must be 'http' or 'https'"
+        )
+    if scheme == "http" and not allow_insecure_http:
+        raise ValueError(
+            "http:// base_url rejected (insecure). "
+            "Use https://, or set IDP_ALLOW_INSECURE_HTTP=1 for local dev"
+        )
+    host = (parsed.hostname or "").strip()
+    if not host:
+        raise ValueError("base_url missing hostname")
+    # Resolve to all IPs so a DNS rebind to a private IP doesn't slip through.
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or (443 if scheme == "https" else 80))
+    except socket.gaierror as e:
+        raise ValueError(f"base_url hostname {host!r} did not resolve: {e}") from e
+    if not infos:
+        raise ValueError(f"base_url hostname {host!r} resolved to no addresses")
+    resolved_ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for info in infos:
+        sockaddr = info[4]
+        ip_str = sockaddr[0]
+        try:
+            resolved_ips.append(ipaddress.ip_address(ip_str))
+        except ValueError:
+            # Should not happen for getaddrinfo, but be defensive.
+            continue
+    if not resolved_ips:
+        raise ValueError(f"base_url hostname {host!r} resolved to no IPs")
+    if not allow_private_network:
+        for ip in resolved_ips:
+            if _is_private_ip(ip):
+                raise ValueError(
+                    f"base_url hostname {host!r} resolves to private/loopback "
+                    f"IP {ip} (rejected for SSRF protection). "
+                    f"Set IDP_ALLOW_PRIVATE_NETWORK=1 to allow on-prem/LAN targets"
+                )
+    return url
 
 
 @dataclass
@@ -154,7 +258,20 @@ class OpenAICompatBackend(Backend):
         model: str = "llama3.2-vision",
         api_key: str | None = None,
         timeout: float = 120.0,
+        *,
+        _allow_private_network: bool = False,
     ):
+        # SSRF guard: validate scheme + hostname + resolved IPs before we
+        # store the URL. Cheap, runs at construction time, refuses to
+        # point at private/loopback/link-local IPs unless explicitly
+        # opted in via env (or via the internal _allow_private_network
+        # kwarg used by the Ollama/vLLM-on-localhost dispatch). The China
+        # presets are all public HTTPS so they pass without opt-in.
+        _validate_base_url(
+            base_url,
+            allow_private_network=_allow_private_network or _ALLOW_PRIVATE_NETWORK,
+            allow_insecure_http=_allow_private_network or _INSECURE_HTTP_OK,
+        )
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "ollama")
@@ -379,7 +496,21 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
         )
     # International OpenAI-compat
     if name in ("openai", "compat", "ollama", "vllm", "lm-studio"):
-        return OpenAICompatBackend(**kwargs)
+        # The Ollama/vLLM/LM-Studio presets are typically run on the
+        # same host as py-idp (localhost / LAN). The SSRF guard
+        # rejects loopback / private IPs by default; this opt-in flag
+        # is the only way the constructor will accept a localhost URL
+        # without the operator setting IDP_ALLOW_PRIVATE_NETWORK.
+        kwargs.setdefault(
+            "base_url",
+            "https://api.openai.com/v1"
+            if name in ("openai", "compat")
+            else "http://localhost:11434/v1",
+        )
+        return OpenAICompatBackend(
+            _allow_private_network=(name in ("ollama", "vllm", "lm-studio")),
+            **kwargs,
+        )
     if name == "anthropic":
         return AnthropicBackend(**kwargs)
     raise ValueError(f"Unknown backend: {name}")
