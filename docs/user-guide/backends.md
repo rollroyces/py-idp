@@ -71,3 +71,48 @@ export IDP_BACKEND=nanonets
 ```
 
 Speed: ~5–15 seconds per page on Apple M4 (CPU+GPU mixed, float16). First call downloads the model; subsequent calls use the `~/.cache/huggingface/hub/` cache.
+
+## Custom backends
+
+When the 12+ shipped backends aren't enough — internal model gateway,
+fixed-response test fixture, non-standard protocol — register your own
+via the `@register_backend` decorator:
+
+```python
+from idp.llm.backend import Backend, register_backend, get_backend
+
+@register_backend("my-llm")
+class MyBackend(Backend):
+    name = "my-llm"
+    def complete(self, req):
+        # ... call your model, return JSON string ...
+        return '{"field": "value"}'
+
+backend = get_backend("my-llm")  # looks up via the registry
+```
+
+For a full end-to-end example, see
+[`examples/06_custom_backend.py`](https://github.com/rollroyces/py-idp/blob/main/examples/06_custom_backend.py).
+
+### Discovering what's registered
+
+`idp.llm.list_backends()` returns a sorted list of canonical backend names
+currently in the registry:
+
+```python
+from idp.llm import list_backends
+print(list_backends())  # ['anthropic', 'mock', 'openai-compat']
+```
+
+This does **not** include aliases (`"openai"` → `"openai-compat"`) or
+gated backends (`"slowmock"`, `"nanonets"`) — those require env-var opt-in.
+The full alias map is exposed as `_REGISTRY_ALIASES` for programmatic
+introspection.
+
+### Adding a new alias
+
+If you need to keep an existing user-facing name working but route it to
+a different backend (e.g. you want `"ollama"` to resolve to a custom
+gateway), edit `_REGISTRY_ALIASES` in `src/idp/llm/backend.py`. The
+existing test suite (`tests/test_backend_registry.py`) documents the
+expected alias behaviour.
