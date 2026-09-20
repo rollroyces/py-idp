@@ -127,3 +127,9 @@ def test_dockerfile_no_floating_base_image():
             assert "@sha256:" in line, (
                 f"Floating base image — must be pinned to a digest: {line!r}"
             )
+
+
+# Note for future maintainers: if you change the digest pinning strategy,
+# keep the test_grep pattern compatible. The test asserts the FROM line
+# starts with "FROM python:" and includes "@sha256:" — both must remain
+# present for reproducible builds.
