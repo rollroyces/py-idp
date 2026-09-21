@@ -214,6 +214,160 @@ def discover_template_cmd(
     console.print(f"[bold]fields:[/bold] {len(field_lines)} detected")
 
 
+@app.command(name="migrate-template")
+def migrate_template(
+    template_name: str = typer.Option(
+        ...,
+        "--template-name",
+        "-t",
+        help="Template (== schema) name to migrate. In v0.4 templates are "
+             "1:1 with schemas, so this filters StoredResults by schema_name.",
+    ),
+    from_version: int = typer.Option(
+        ...,
+        "--from-version",
+        help="The version recorded on the v1 records. Kept in the report; "
+             "explicit filtering on this value is a v0.5 item.",
+    ),
+    to_version: int = typer.Option(
+        ...,
+        "--to-version",
+        help="The version to attach to newly-persisted v2 records when "
+             "--commit is passed.",
+    ),
+    storage: str | None = typer.Option(
+        None,
+        "--storage",
+        "-s",
+        help="Storage backend name (json | memory | sql) or a path to a "
+             "JsonFileStorage results.jsonl. Default: env IDP_STORAGE_BACKEND or json.",
+    ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help="Path for json backend (env: IDP_JSON_PATH). Default ./idp_data/results.jsonl.",
+    ),
+    db_url: str | None = typer.Option(
+        None,
+        "--db-url",
+        help="SQL URL for sql backend (env: IDP_DB_URL).",
+    ),
+    backend: str = typer.Option(
+        "mock",
+        "--backend",
+        "-b",
+        help="LLM backend for the v2 re-run pipeline (mock | openai | ollama | ...).",
+    ),
+    schema: str | None = typer.Option(
+        None,
+        "--schema",
+        help="Pydantic schema name for the v2 re-run. Default: same as --template-name.",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Write the side-by-side diff JSON report to this path. "
+             "Required when --commit is used.",
+    ),
+    dry_run: bool = typer.Option(
+        True,
+        "--dry-run/--commit",
+        help="Default: --dry-run (no writes). Pass --commit to persist v2 records.",
+    ),
+):
+    """Migrate v1 template records to v2 by re-running the pipeline (P5 v0.4 / C4).
+
+    Walks StoredResults for the given template, re-runs the pipeline
+    against the v2 template using each result's stored
+    ``source_path`` (the original document on disk), and emits a
+    side-by-side diff (per field, ``old_extraction`` vs
+    ``new_extraction``).
+
+    By default, the run is a DRY RUN: nothing is written back to
+    storage. Pass ``--commit`` to persist new v2 StoredResults; the
+    original v1 records are left intact.
+
+    Scope (per ROADMAP_v0.4.md Q4):
+      * Raw extraction only. v1 human reviews stay attached to v1.
+      * No policy-version tracking.
+      * No incremental re-run; whole-document re-run.
+
+    Example::
+
+        idp migrate-template \\
+            --template-name Invoice --from-version 1 --to-version 2 \\
+            --storage ./idp_data/results.jsonl --output diff.json
+
+        # Persist v2 records:
+        idp migrate-template \\
+            --template-name Invoice --from-version 1 --to-version 2 \\
+            --storage ./idp_data/results.jsonl --output diff.json --commit
+    """
+    from idp.migrate import migrate_template_version
+    from idp.pipeline.pipeline import Pipeline
+    from idp.storage import make_storage
+
+    # Schema defaults to template name (templates are 1:1 with
+    # schemas in v0.4; see src/idp/migrate.py docstring).
+    schema_name = schema or template_name
+
+    # Same dual-use parsing as the triage command: --storage doubles
+    # as either a backend name (json/sql/memory) or a filesystem path
+    # to a JsonFileStorage file.
+    KNOWN_BACKENDS = {
+        "json", "memory", "mem", "sql", "sqlite", "postgres", "postgresql",
+    }
+    backend_name: str | None
+    if storage and storage not in KNOWN_BACKENDS:
+        json_path = storage
+        backend_name = "json"
+    else:
+        backend_name = storage
+
+    try:
+        store = make_storage(backend=backend_name, json_path=json_path, db_url=db_url)
+    except (ValueError, ImportError) as e:
+        console.print(f"[red]storage error:[/red] {e}")
+        raise typer.Exit(code=1) from None
+
+    def _factory() -> Pipeline:
+        return Pipeline(backend=backend, schema=schema_name)
+
+    try:
+        report = migrate_template_version(
+            store,
+            template_name,
+            from_version=from_version,
+            to_version=to_version,
+            pipeline_factory=_factory,
+            output_path=output,
+            dry_run=dry_run,
+        )
+    except ValueError as e:
+        console.print(f"[red]migration error:[/red] {e}")
+        raise typer.Exit(code=1) from None
+
+    counts = (
+        f"total={report.to_dict()['counts']['total']} "
+        f"added={report.added} removed={report.removed} "
+        f"changed={report.changed} unchanged={report.unchanged} "
+        f"skipped={report.skipped} committed={report.committed}"
+    )
+    mode = "DRY RUN" if report.dry_run else "COMMITTED"
+    console.print(
+        f"[bold green]migrate-template ({mode})[/bold green] "
+        f"{template_name} v{from_version} → v{to_version}: {counts}"
+    )
+    if output:
+        console.print(f"[green]report saved:[/green] {output}")
+    if not report.dry_run:
+        console.print(
+            "[yellow]note:[/yellow] v1 records were NOT modified. v2 records "
+            "were appended (raw extraction only; no review propagation)."
+        )
+
+
 @app.command(name="batch")
 def batch(
     sources: list[str] = typer.Argument(
