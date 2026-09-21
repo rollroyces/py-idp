@@ -5,7 +5,11 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
-## [Unreleased] — v0.4
+## [0.4.0] — 2026-09-21 — v0.4 plan complete
+
+The v0.4 plan recorded in `docs/ROADMAP_v0.4.md` ships in this release.
+Five PRs landed (#37, #38, #39, #40, #41), each independently tested
+and reviewable. Headline: **"much easier setup, still need accuracy."**
 
 ### Added
 
@@ -33,10 +37,88 @@ the third on bugfixes.
 * **`tests/test_tiered.py`** (14 tests) — covers routing-to-cheap,
   escalation on low-confidence / parse-failure, threshold-boundary
   behaviour, both-tiers-exhausted error contract, pipeline
-  transparency, and defensive constructor validation.
+  configuration and defensive constructor validation.
 * **`tests/test_ollama_backend.py`** (15 tests) — covers the wire
   shape, response parsing, error surfaces, env-var resolution, and
   multimodal tag detection — all against a mocked `httpx.MockTransport`.
+
+* **Example notebooks (v0.4 P1)** — `examples/notebooks/`. Three
+  executed Jupyter notebooks walk through py-idp end-to-end with
+  the in-tree `MockBackend` (no API key required):
+  - `01_pipeline_minimal.ipynb` (5-min tour, 11 cells)
+  - `02_hitl_loop.ipynb` (HITL feedback loop, 11 cells)
+  - `03_batch.ipynb` (30-doc batch + DataFrame + checkpoint
+    resume, 19 cells — also covers the v0.4 direction D3
+    `BatchItemResult` workflow)
+  Each notebook ships with real output cells so GitHub renders
+  numbers, not blank blocks. `pyproject.toml` adds a `[notebooks]`
+  extra (`nbformat` + `nbconvert` + `ipykernel` + `pandas`) for users
+  who want to re-execute them. Ruff config excludes `*.ipynb` (cells
+  have import quirks that don't fit module-level lint).
+
+* **`idp hitl triage` (v0.4 P3 + D1)** — `src/idp/hitl/triage.py`.
+  A pure module (no Streamlit) exposing `triage(storage, *,
+  min_reviews=3, threshold=0.6) -> TriageReport`. Walks reviewed
+  `StoredResult`s, partitions fields into `.systematic_errors`
+  (correction rate ≥ threshold AND n ≥ min_reviews) and
+  `.insufficient` (the honest "needs N more reviews" bucket).
+  CLI: `idp triage --storage <path> [--min-reviews 3] [--threshold
+  0.6] [--output json|md]`. Streamlit "Triage" page reachable from
+  the sidebar in the existing `idp serve` UI. Tested via
+  `tests/test_triage.py` (21 tests).
+
+* **HITL UX polish (v0.4 P3 + C3)** — `src/idp/hitl/app.py`. Additive:
+  the review-queue view gains a side-by-side field view (model
+  output | human-edited with pre-populated widget), a bulk-accept
+  button at ≥ 0.9 confidence (calls `save_review` with unchanged
+  extraction on high-confidence fields), a skip button (non-persistent
+  close), a per-document confidence histogram (`st.bar_chart`),
+  and a keyboard-shortcut help expander. The Triage page is
+  reachable from the sidebar. All existing review behaviour
+  unchanged. Tested via 6 new AppTest smoke tests.
+
+* **CORD baseline eval (v0.4 P4 + C2)** — `src/idp/eval/datasets/cord/`.
+  30 synthetic-but-faithful receipts (matching the CORD schema and
+  license — CC-BY-2020, the `cord2020` paper), `manifest.json` with
+  ground-truth extraction per doc, verbatim `LICENSE.txt` and
+  `ATTRIBUTION.md`. New CLI helper `tests/eval_cord/update_baseline_doc.py`
+  regenerates `docs/eval/BASELINE.md` (the per-field precision/recall/F1
+  table). Slow-marked `tests/eval_cord/test_eval_real_dataset.py`
+  runs against a real backend when `IDP_USER_ID=ollama|anthropic|openai`
+  is set. MockBackend baseline is intentionally near zero (no real
+  model calls happen) — the doc gives users a starting point to
+  re-run against their own backend.
+
+* **Template-version migration (v0.4 P5 + C4)** — `src/idp/migrate.py`.
+  Exposes `migrate_template_version(storage, template_name, *,
+  from_version, to_version, pipeline_factory, output_path=None,
+  dry_run=True) -> MigrationReport`. Reuses `process_batch` plumbing.
+  Default is dry-run (does not mutate the source schema); `--commit`
+  flag persists new extractions as fresh v2 `StoredResult`s while v1
+  records stay intact. Per-field diff (`added` / `removed` /
+  `changed` / `unchanged`). CLI: `idp migrate-template --storage
+  <back> --template-name <name> --from-version <v1> --to-version
+  <v2> [--dry-run] [--commit] [--output FILE]`. Tested via
+  `tests/test_migrate_template.py` (10 unit tests + 1 slow e2e test
+  against CORD fixtures).
+
+* **`pyproject.toml` `[notebooks]` extra** — `nbformat>=5.10`,
+  `nbconvert>=7.0`, `ipykernel>=6.0`, `pandas>=2.1`. Install with
+  `pip install py-idp[notebooks]` to re-execute the example
+  notebooks.
+
+* **`pyproject.toml` `slow` pytest marker** — registered for tests
+  that require a real backend (CORD baseline, CORD migration e2e).
+  Skipped in default CI; run with `pytest -m slow`.
+
+* **Breaking: `get_backend("ollama")` now returns `OllamaBackend`** —
+  previously returned `OpenAICompatBackend` (Ollama was treated as
+  OpenAI-compatible). Ollama's native `/api/chat` shape is materially
+  different, so v0.4 routes it through the dedicated class. Users
+  who relied on the OpenAI-compat behaviour should switch to
+  `get_backend("compat")` with `OLLAMA_OPENAI_COMPAT=true` (or
+  whatever env var the OpenAI-compatible server expects). Safe
+  because v0.3.x was never published to PyPI.
 
 ### Not in v0.4 (explicit non-goals, deferred to v0.5)
 
@@ -48,6 +130,23 @@ the third on bugfixes.
 * Tiered caching (re-run the cheap tier vs serve from cache) — for
   v0.4 compose TieredBackend with the existing
   `idp.reliability.CachingBackend` instead.
+* Per-template triage report (today: one triage report across all
+  schemas).
+* LLM-based confidence overrides (triage uses stored `confidence`
+  as-is; no inference).
+* Automatic field-correction (no `save_review` writes happen from
+  the triage tool).
+* Statistical significance testing on triage (threshold-based, not
+  p-value).
+* Full-feedback-loop-aware migration (v0.4 is raw-extraction only).
+* Per-template baselines (each schema gets its own baseline
+  numbers).
+* Automated regression gating on the CORD baseline (drift
+  threshold TBD).
+* The original ~1000 real CORD receipts (manifest format is
+  forward-compatible; a v0.5 PR can swap them in).
+* Per-template CORD baseline coverage (multi-class document types
+  — FUNSD forms, CUAD contracts — all deferred).
 
 ## [0.3.8] — 2026-09-17 — coverage push to 92%, PIL 10+ bug fix
 
