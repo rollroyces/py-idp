@@ -1,0 +1,17 @@
+Receipt - bakery
+Date: 2025-01-18
+Time: 07:25
+
+Daily Bread Bakery
+12 Elm Avenue
+
+2  Sourdough loaf      $4.50
+1  Baguette            $4.50
+3  Chocolate croissant $1.95
+
+Subtotal              $19.35
+Tax                    $1.58
+Tip                    $0.00
+Total                 $20.93
+
+Visa ****1129

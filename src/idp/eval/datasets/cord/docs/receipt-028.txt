@@ -1,0 +1,18 @@
+Receipt - auto parts
+Date: 2025-08-29
+Time: 10:30
+
+AutoZone
+75 Motor Mile
+
+1  Oil filter           $9.99
+1  Air filter          $19.99
+1  Wiper blades        $24.99
+1  Brake fluid          $8.99
+
+Subtotal              $63.96
+Tax                    $5.23
+Tip                    $0.00
+Total                 $69.19
+
+Visa ****8811

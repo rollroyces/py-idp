@@ -1,0 +1,17 @@
+Receipt - wine shop
+Date: 2025-09-11
+Time: 18:55
+
+Vintner's Cellar
+14 Cellar Lane
+
+1  Red wine bottle     $32.99
+1  White wine bottle   $28.50
+1  Wine glass set      $19.99
+
+Subtotal              $81.48
+Tax                    $6.66
+Tip                    $0.00
+Total                 $88.14
+
+Amex ****3322

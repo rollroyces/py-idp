@@ -1,0 +1,18 @@
+Receipt - deli
+Date: 2025-01-29
+Time: 12:15
+
+Corner Deli
+45 Main Street
+
+1  Turkey sandwich      $8.95
+1  Side salad           $4.50
+1  Pickle               $1.25
+1  Bottled juice        $3.50
+
+Subtotal              $18.20
+Tax                    $1.49
+Tip                    $0.00
+Total                 $19.69
+
+Cash

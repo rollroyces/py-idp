@@ -1,0 +1,17 @@
+Receipt - car wash
+Date: 2025-07-22
+Time: 14:14
+
+Sudz Car Wash
+Highway 27 Service Road
+
+1  Premium wash        $24.99
+1  Wax treatment        $9.99
+1  Air freshener        $4.99
+
+Subtotal              $39.97
+Tax                    $3.27
+Tip                    $0.00
+Total                 $43.24
+
+Visa ****4477

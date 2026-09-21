@@ -158,3 +158,6 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (real-network / real-LLM); skipped by default with `-m 'not slow'`",
+]

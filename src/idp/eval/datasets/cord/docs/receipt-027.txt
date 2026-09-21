@@ -1,0 +1,17 @@
+Receipt - ice cream parlor
+Date: 2025-07-19
+Time: 16:55
+
+Scoops
+2 Cone Plaza
+
+2  Waffle cone 2-scoop  $4.75
+1  Sundae               $7.95
+1  Milkshake            $6.50
+
+Subtotal              $23.95
+Tax                    $1.96
+Tip                    $0.00
+Total                 $25.91
+
+Cash

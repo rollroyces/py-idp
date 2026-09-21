@@ -1,0 +1,18 @@
+Receipt - Italian restaurant (with tip)
+Date: 2025-07-02
+Time: 21:10
+
+Trattoria Bella
+78 Vine Street
+
+2  Margherita pizza    $16.00
+1  Caesar salad         $9.50
+3  Glass of house red  $12.00
+1  Tiramisu            $11.00
+
+Subtotal              $88.50
+Tax                    $7.52
+Tip                   $17.70
+Total                $113.72
+
+Amex ****2087

@@ -1,0 +1,14 @@
+Receipt - parking garage (no line items)
+Date: 2025-10-21
+Time: 13:00
+
+Downtown Parking
+88 Wall Street
+
+Flat rate 3 hours     $27.00
+
+Subtotal              $27.00
+Tax                    $2.36
+Total                 $29.36
+
+Mastercard ****8820

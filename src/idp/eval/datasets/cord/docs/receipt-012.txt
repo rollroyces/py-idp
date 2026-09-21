@@ -1,0 +1,17 @@
+Receipt - electronics store
+Date: 2025-02-04
+Time: 14:55
+
+Tech Hub
+450 Industrial Way
+
+1  USB-C cable         $14.99
+1  Wireless mouse      $29.99
+1  Screen protector     $9.99
+
+Subtotal              $54.97
+Tax                    $4.50
+Tip                    $0.00
+Total                 $59.47
+
+Visa ****3344

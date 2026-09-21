@@ -1,0 +1,17 @@
+Receipt - bookstore
+Date: 2025-05-03
+Time: 15:50
+
+Pages Bookstore
+56 Maple Court
+
+1  Hardcover novel      $24.99
+1  Paperback memoir    $16.50
+1  Magazine             $7.95
+
+Subtotal              $49.44
+Tax                    $4.05
+Tip                    $0.00
+Total                 $53.49
+
+Mastercard ****5544

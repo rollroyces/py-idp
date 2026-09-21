@@ -1,0 +1,18 @@
+Receipt - cafe
+Date: 2025-01-04
+Time: 08:14
+
+Morning Brew Cafe
+42 Pine Street
+
+1  Espresso             $3.25
+1  Almond croissant     $4.50
+1  Orange juice         $4.00
+
+Subtotal              $11.75
+Tax                    $0.99
+Tip                    $0.00
+Total                 $12.74
+
+Visa ****2210
+Thanks for visiting

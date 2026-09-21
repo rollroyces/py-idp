@@ -1,0 +1,1095 @@
+{
+  "dataset": "cord",
+  "schema": "Receipt",
+  "schema_module": "idp.core.schemas.Receipt",
+  "source": "CORD: Consolidated Receipt Dataset (Park et al., 2019) \u2014 CC-BY-4.0",
+  "license": "CC-BY-4.0 (see LICENSE.txt; ATTRIBUTION.md has BibTeX)",
+  "fixtures_note": "30 synthetic receipts authored to exercise the CORD-shape Receipt schema; not copies of real receipts.",
+  "n_docs": 30,
+  "docs": [
+    {
+      "doc_path": "docs/receipt-001.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Morning Brew Cafe",
+        "date": "2025-01-04",
+        "time": "08:14",
+        "line_items": [
+          {
+            "description": "Espresso",
+            "quantity": 1,
+            "unit_price": 3.25,
+            "total": 3.25
+          },
+          {
+            "description": "Almond croissant",
+            "quantity": 1,
+            "unit_price": 4.5,
+            "total": 4.5
+          },
+          {
+            "description": "Orange juice",
+            "quantity": 1,
+            "unit_price": 4.0,
+            "total": 4.0
+          }
+        ],
+        "subtotal": 11.75,
+        "tax_amount": 0.99,
+        "tip_amount": 0.0,
+        "total": 12.74,
+        "payment_method": "Visa",
+        "credit_card_last4": "2210"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-002.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Burger Spot",
+        "date": "2025-02-19",
+        "time": "12:48",
+        "line_items": [
+          {
+            "description": "Cheeseburger combo",
+            "quantity": 2,
+            "unit_price": 8.95,
+            "total": 17.9
+          },
+          {
+            "description": "Veggie wrap",
+            "quantity": 1,
+            "unit_price": 7.5,
+            "total": 7.5
+          },
+          {
+            "description": "Large fries",
+            "quantity": 1,
+            "unit_price": 3.25,
+            "total": 3.25
+          },
+          {
+            "description": "Soft drink",
+            "quantity": 2,
+            "unit_price": 2.5,
+            "total": 5.0
+          }
+        ],
+        "subtotal": 33.65,
+        "tax_amount": 2.75,
+        "tip_amount": 0.0,
+        "total": 36.4,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "7766"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-003.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Sakura Sushi",
+        "date": "2025-03-08",
+        "time": "19:35",
+        "line_items": [
+          {
+            "description": "Tuna nigiri (5 pc)",
+            "quantity": 1,
+            "unit_price": 14.0,
+            "total": 14.0
+          },
+          {
+            "description": "Salmon roll",
+            "quantity": 1,
+            "unit_price": 9.5,
+            "total": 9.5
+          },
+          {
+            "description": "Miso soup",
+            "quantity": 1,
+            "unit_price": 3.5,
+            "total": 3.5
+          },
+          {
+            "description": "Green tea",
+            "quantity": 2,
+            "unit_price": 2.5,
+            "total": 5.0
+          }
+        ],
+        "subtotal": 32.0,
+        "tax_amount": 2.72,
+        "tip_amount": 6.4,
+        "total": 41.12,
+        "payment_method": "Amex",
+        "credit_card_last4": "1031"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-004.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "City Pharmacy",
+        "date": "2025-04-12",
+        "time": "10:22",
+        "line_items": [
+          {
+            "description": "Allergy tablets",
+            "quantity": 1,
+            "unit_price": 12.99,
+            "total": 12.99
+          },
+          {
+            "description": "Vitamin C 100 ct",
+            "quantity": 1,
+            "unit_price": 14.5,
+            "total": 14.5
+          },
+          {
+            "description": "Sunscreen SPF 50",
+            "quantity": 1,
+            "unit_price": 18.75,
+            "total": 18.75
+          }
+        ],
+        "subtotal": 46.24,
+        "tax_amount": 3.78,
+        "tip_amount": 0.0,
+        "total": 50.02,
+        "payment_method": "Visa",
+        "credit_card_last4": "9982"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-005.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Pages Bookstore",
+        "date": "2025-05-03",
+        "time": "15:50",
+        "line_items": [
+          {
+            "description": "Hardcover novel",
+            "quantity": 1,
+            "unit_price": 24.99,
+            "total": 24.99
+          },
+          {
+            "description": "Paperback memoir",
+            "quantity": 1,
+            "unit_price": 16.5,
+            "total": 16.5
+          },
+          {
+            "description": "Magazine",
+            "quantity": 1,
+            "unit_price": 7.95,
+            "total": 7.95
+          }
+        ],
+        "subtotal": 49.44,
+        "tax_amount": 4.05,
+        "tip_amount": 0.0,
+        "total": 53.49,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "5544"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-006.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Corner Gas",
+        "date": "2025-06-17",
+        "time": "09:08",
+        "line_items": [],
+        "subtotal": 48.43,
+        "tax_amount": 4.04,
+        "tip_amount": null,
+        "total": 52.47,
+        "payment_method": "Visa",
+        "credit_card_last4": "6677"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-007.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Trattoria Bella",
+        "date": "2025-07-02",
+        "time": "21:10",
+        "line_items": [
+          {
+            "description": "Margherita pizza",
+            "quantity": 2,
+            "unit_price": 16.0,
+            "total": 32.0
+          },
+          {
+            "description": "Caesar salad",
+            "quantity": 1,
+            "unit_price": 9.5,
+            "total": 9.5
+          },
+          {
+            "description": "Glass of house red",
+            "quantity": 3,
+            "unit_price": 12.0,
+            "total": 36.0
+          },
+          {
+            "description": "Tiramisu",
+            "quantity": 1,
+            "unit_price": 11.0,
+            "total": 11.0
+          }
+        ],
+        "subtotal": 88.5,
+        "tax_amount": 7.52,
+        "tip_amount": 17.7,
+        "total": 113.72,
+        "payment_method": "Amex",
+        "credit_card_last4": "2087"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-008.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Quick Mart 24",
+        "date": "2025-08-14",
+        "time": "23:47",
+        "line_items": [
+          {
+            "description": "Sandwich",
+            "quantity": 1,
+            "unit_price": 6.49,
+            "total": 6.49
+          },
+          {
+            "description": "Coffee large",
+            "quantity": 1,
+            "unit_price": 3.29,
+            "total": 3.29
+          },
+          {
+            "description": "Bananas",
+            "quantity": 1,
+            "unit_price": 0.79,
+            "total": 0.79
+          },
+          {
+            "description": "Gum",
+            "quantity": 1,
+            "unit_price": 1.99,
+            "total": 1.99
+          }
+        ],
+        "subtotal": 12.56,
+        "tax_amount": 1.02,
+        "tip_amount": 0.0,
+        "total": 13.58,
+        "payment_method": "Cash",
+        "credit_card_last4": null
+      }
+    },
+    {
+      "doc_path": "docs/receipt-009.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Harvest Grocery",
+        "date": "2025-09-09",
+        "time": "16:33",
+        "line_items": [
+          {
+            "description": "Banana organic",
+            "quantity": 3,
+            "unit_price": 0.69,
+            "total": 2.07
+          },
+          {
+            "description": "Avocado",
+            "quantity": 1,
+            "unit_price": 2.5,
+            "total": 2.5
+          },
+          {
+            "description": "Sourdough loaf",
+            "quantity": 2,
+            "unit_price": 4.5,
+            "total": 9.0
+          },
+          {
+            "description": "Olive oil 500ml",
+            "quantity": 1,
+            "unit_price": 14.99,
+            "total": 14.99
+          },
+          {
+            "description": "Almond butter",
+            "quantity": 1,
+            "unit_price": 11.49,
+            "total": 11.49
+          }
+        ],
+        "subtotal": 40.05,
+        "tax_amount": 3.49,
+        "tip_amount": 0.0,
+        "total": 43.54,
+        "payment_method": "Visa",
+        "credit_card_last4": "7711"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-010.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Downtown Parking",
+        "date": "2025-10-21",
+        "time": "13:00",
+        "line_items": [],
+        "subtotal": 27.0,
+        "tax_amount": 2.36,
+        "tip_amount": null,
+        "total": 29.36,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "8820"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-011.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Daily Bread Bakery",
+        "date": "2025-01-18",
+        "time": "07:25",
+        "line_items": [
+          {
+            "description": "Sourdough loaf",
+            "quantity": 2,
+            "unit_price": 4.5,
+            "total": 9.0
+          },
+          {
+            "description": "Baguette",
+            "quantity": 1,
+            "unit_price": 4.5,
+            "total": 4.5
+          },
+          {
+            "description": "Chocolate croissant",
+            "quantity": 3,
+            "unit_price": 1.95,
+            "total": 5.85
+          }
+        ],
+        "subtotal": 19.35,
+        "tax_amount": 1.58,
+        "tip_amount": 0.0,
+        "total": 20.93,
+        "payment_method": "Visa",
+        "credit_card_last4": "1129"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-012.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Tech Hub",
+        "date": "2025-02-04",
+        "time": "14:55",
+        "line_items": [
+          {
+            "description": "USB-C cable",
+            "quantity": 1,
+            "unit_price": 14.99,
+            "total": 14.99
+          },
+          {
+            "description": "Wireless mouse",
+            "quantity": 1,
+            "unit_price": 29.99,
+            "total": 29.99
+          },
+          {
+            "description": "Screen protector",
+            "quantity": 1,
+            "unit_price": 9.99,
+            "total": 9.99
+          }
+        ],
+        "subtotal": 54.97,
+        "tax_amount": 4.5,
+        "tip_amount": 0.0,
+        "total": 59.47,
+        "payment_method": "Visa",
+        "credit_card_last4": "3344"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-013.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Brewed Awakening",
+        "date": "2025-03-22",
+        "time": "10:11",
+        "line_items": [
+          {
+            "description": "Latte grande",
+            "quantity": 2,
+            "unit_price": 3.75,
+            "total": 7.5
+          },
+          {
+            "description": "Cappuccino",
+            "quantity": 1,
+            "unit_price": 4.25,
+            "total": 4.25
+          },
+          {
+            "description": "Blueberry muffin",
+            "quantity": 1,
+            "unit_price": 3.95,
+            "total": 3.95
+          },
+          {
+            "description": "Bottled water",
+            "quantity": 2,
+            "unit_price": 2.5,
+            "total": 5.0
+          }
+        ],
+        "subtotal": 20.7,
+        "tax_amount": 1.69,
+        "tip_amount": 0.0,
+        "total": 22.39,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "5521"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-014.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Bangkok Kitchen",
+        "date": "2025-04-08",
+        "time": "19:42",
+        "line_items": [
+          {
+            "description": "Pad Thai",
+            "quantity": 1,
+            "unit_price": 14.95,
+            "total": 14.95
+          },
+          {
+            "description": "Green curry",
+            "quantity": 1,
+            "unit_price": 15.95,
+            "total": 15.95
+          },
+          {
+            "description": "Spring rolls",
+            "quantity": 2,
+            "unit_price": 4.25,
+            "total": 8.5
+          },
+          {
+            "description": "Thai iced tea",
+            "quantity": 1,
+            "unit_price": 4.5,
+            "total": 4.5
+          }
+        ],
+        "subtotal": 43.9,
+        "tax_amount": 3.59,
+        "tip_amount": 8.78,
+        "total": 56.27,
+        "payment_method": "Visa",
+        "credit_card_last4": "8765"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-015.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Builders Depot",
+        "date": "2025-05-19",
+        "time": "11:30",
+        "line_items": [
+          {
+            "description": "Wood screws box",
+            "quantity": 1,
+            "unit_price": 8.99,
+            "total": 8.99
+          },
+          {
+            "description": "Power drill bits",
+            "quantity": 1,
+            "unit_price": 15.49,
+            "total": 15.49
+          },
+          {
+            "description": "Sandpaper pack",
+            "quantity": 2,
+            "unit_price": 5.99,
+            "total": 11.98
+          },
+          {
+            "description": "Tape measure",
+            "quantity": 1,
+            "unit_price": 7.99,
+            "total": 7.99
+          }
+        ],
+        "subtotal": 44.45,
+        "tax_amount": 3.64,
+        "tip_amount": 0.0,
+        "total": 48.09,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "2244"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-016.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Petal & Stem",
+        "date": "2025-06-30",
+        "time": "16:08",
+        "line_items": [
+          {
+            "description": "Mixed bouquet",
+            "quantity": 1,
+            "unit_price": 35.0,
+            "total": 35.0
+          },
+          {
+            "description": "Single rose",
+            "quantity": 1,
+            "unit_price": 4.0,
+            "total": 4.0
+          },
+          {
+            "description": "Vase small",
+            "quantity": 1,
+            "unit_price": 18.0,
+            "total": 18.0
+          }
+        ],
+        "subtotal": 57.0,
+        "tax_amount": 4.66,
+        "tip_amount": 0.0,
+        "total": 61.66,
+        "payment_method": "Visa",
+        "credit_card_last4": "1199"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-017.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Sudz Car Wash",
+        "date": "2025-07-22",
+        "time": "14:14",
+        "line_items": [
+          {
+            "description": "Premium wash",
+            "quantity": 1,
+            "unit_price": 24.99,
+            "total": 24.99
+          },
+          {
+            "description": "Wax treatment",
+            "quantity": 1,
+            "unit_price": 9.99,
+            "total": 9.99
+          },
+          {
+            "description": "Air freshener",
+            "quantity": 1,
+            "unit_price": 4.99,
+            "total": 4.99
+          }
+        ],
+        "subtotal": 39.97,
+        "tax_amount": 3.27,
+        "tip_amount": 0.0,
+        "total": 43.24,
+        "payment_method": "Visa",
+        "credit_card_last4": "4477"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-018.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "La Taqueria",
+        "date": "2025-08-05",
+        "time": "13:25",
+        "line_items": [
+          {
+            "description": "Carnitas taco",
+            "quantity": 3,
+            "unit_price": 3.5,
+            "total": 10.5
+          },
+          {
+            "description": "Al pastor taco",
+            "quantity": 2,
+            "unit_price": 3.0,
+            "total": 6.0
+          },
+          {
+            "description": "Chips and guac",
+            "quantity": 1,
+            "unit_price": 7.5,
+            "total": 7.5
+          },
+          {
+            "description": "Horchata",
+            "quantity": 2,
+            "unit_price": 3.75,
+            "total": 7.5
+          }
+        ],
+        "subtotal": 31.5,
+        "tax_amount": 2.58,
+        "tip_amount": 6.3,
+        "total": 40.38,
+        "payment_method": "Cash",
+        "credit_card_last4": null
+      }
+    },
+    {
+      "doc_path": "docs/receipt-019.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Vintner's Cellar",
+        "date": "2025-09-11",
+        "time": "18:55",
+        "line_items": [
+          {
+            "description": "Red wine bottle",
+            "quantity": 1,
+            "unit_price": 32.99,
+            "total": 32.99
+          },
+          {
+            "description": "White wine bottle",
+            "quantity": 1,
+            "unit_price": 28.5,
+            "total": 28.5
+          },
+          {
+            "description": "Wine glass set",
+            "quantity": 1,
+            "unit_price": 19.99,
+            "total": 19.99
+          }
+        ],
+        "subtotal": 81.48,
+        "tax_amount": 6.66,
+        "tip_amount": 0.0,
+        "total": 88.14,
+        "payment_method": "Amex",
+        "credit_card_last4": "3322"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-020.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Grand Hotel - Room 412",
+        "date": "2025-10-04",
+        "time": "22:33",
+        "line_items": [
+          {
+            "description": "Sparkling water",
+            "quantity": 1,
+            "unit_price": 5.0,
+            "total": 5.0
+          },
+          {
+            "description": "Chocolate bar",
+            "quantity": 1,
+            "unit_price": 4.5,
+            "total": 4.5
+          },
+          {
+            "description": "Pringles can",
+            "quantity": 1,
+            "unit_price": 6.0,
+            "total": 6.0
+          }
+        ],
+        "subtotal": 15.5,
+        "tax_amount": 1.27,
+        "tip_amount": 0.0,
+        "total": 16.77,
+        "payment_method": "Visa",
+        "credit_card_last4": "9999"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-021.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Corner Deli",
+        "date": "2025-01-29",
+        "time": "12:15",
+        "line_items": [
+          {
+            "description": "Turkey sandwich",
+            "quantity": 1,
+            "unit_price": 8.95,
+            "total": 8.95
+          },
+          {
+            "description": "Side salad",
+            "quantity": 1,
+            "unit_price": 4.5,
+            "total": 4.5
+          },
+          {
+            "description": "Pickle",
+            "quantity": 1,
+            "unit_price": 1.25,
+            "total": 1.25
+          },
+          {
+            "description": "Bottled juice",
+            "quantity": 1,
+            "unit_price": 3.5,
+            "total": 3.5
+          }
+        ],
+        "subtotal": 18.2,
+        "tax_amount": 1.49,
+        "tip_amount": 0.0,
+        "total": 19.69,
+        "payment_method": "Cash",
+        "credit_card_last4": null
+      }
+    },
+    {
+      "doc_path": "docs/receipt-022.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Step Right",
+        "date": "2025-02-23",
+        "time": "17:48",
+        "line_items": [
+          {
+            "description": "Running shoes size 10",
+            "quantity": 1,
+            "unit_price": 89.99,
+            "total": 89.99
+          },
+          {
+            "description": "Athletic socks 3-pk",
+            "quantity": 1,
+            "unit_price": 12.5,
+            "total": 12.5
+          }
+        ],
+        "subtotal": 102.49,
+        "tax_amount": 8.38,
+        "tip_amount": 0.0,
+        "total": 110.87,
+        "payment_method": "Visa",
+        "credit_card_last4": "6644"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-023.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Paws & Claws",
+        "date": "2025-03-15",
+        "time": "11:05",
+        "line_items": [
+          {
+            "description": "Dog food 5kg",
+            "quantity": 1,
+            "unit_price": 39.99,
+            "total": 39.99
+          },
+          {
+            "description": "Cat toys",
+            "quantity": 2,
+            "unit_price": 4.49,
+            "total": 8.98
+          },
+          {
+            "description": "Pet shampoo",
+            "quantity": 1,
+            "unit_price": 12.5,
+            "total": 12.5
+          }
+        ],
+        "subtotal": 61.47,
+        "tax_amount": 5.03,
+        "tip_amount": 0.0,
+        "total": 66.5,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "8833"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-024.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Tropical Blend",
+        "date": "2025-04-27",
+        "time": "15:20",
+        "line_items": [
+          {
+            "description": "Mango smoothie",
+            "quantity": 2,
+            "unit_price": 4.75,
+            "total": 9.5
+          },
+          {
+            "description": "Acai bowl",
+            "quantity": 1,
+            "unit_price": 11.95,
+            "total": 11.95
+          },
+          {
+            "description": "Granola bar",
+            "quantity": 1,
+            "unit_price": 3.5,
+            "total": 3.5
+          }
+        ],
+        "subtotal": 24.95,
+        "tax_amount": 2.04,
+        "tip_amount": 0.0,
+        "total": 26.99,
+        "payment_method": "Visa",
+        "credit_card_last4": "2211"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-025.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Spotless Dry Cleaning",
+        "date": "2025-05-14",
+        "time": "09:40",
+        "line_items": [
+          {
+            "description": "Shirt laundered",
+            "quantity": 2,
+            "unit_price": 3.0,
+            "total": 6.0
+          },
+          {
+            "description": "Suit pressed",
+            "quantity": 1,
+            "unit_price": 12.5,
+            "total": 12.5
+          },
+          {
+            "description": "Tie cleaned",
+            "quantity": 1,
+            "unit_price": 5.0,
+            "total": 5.0
+          }
+        ],
+        "subtotal": 23.5,
+        "tax_amount": 1.92,
+        "tip_amount": 0.0,
+        "total": 25.42,
+        "payment_method": "Visa",
+        "credit_card_last4": "7001"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-026.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Cineplex 12",
+        "date": "2025-06-08",
+        "time": "20:25",
+        "line_items": [
+          {
+            "description": "Adult ticket",
+            "quantity": 2,
+            "unit_price": 12.0,
+            "total": 24.0
+          },
+          {
+            "description": "Child ticket",
+            "quantity": 1,
+            "unit_price": 10.0,
+            "total": 10.0
+          },
+          {
+            "description": "Large popcorn",
+            "quantity": 1,
+            "unit_price": 9.5,
+            "total": 9.5
+          },
+          {
+            "description": "Soft drink",
+            "quantity": 2,
+            "unit_price": 3.5,
+            "total": 7.0
+          }
+        ],
+        "subtotal": 50.5,
+        "tax_amount": 4.13,
+        "tip_amount": 0.0,
+        "total": 54.63,
+        "payment_method": "Mastercard",
+        "credit_card_last4": "5566"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-027.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Scoops",
+        "date": "2025-07-19",
+        "time": "16:55",
+        "line_items": [
+          {
+            "description": "Waffle cone 2-scoop",
+            "quantity": 2,
+            "unit_price": 4.75,
+            "total": 9.5
+          },
+          {
+            "description": "Sundae",
+            "quantity": 1,
+            "unit_price": 7.95,
+            "total": 7.95
+          },
+          {
+            "description": "Milkshake",
+            "quantity": 1,
+            "unit_price": 6.5,
+            "total": 6.5
+          }
+        ],
+        "subtotal": 23.95,
+        "tax_amount": 1.96,
+        "tip_amount": 0.0,
+        "total": 25.91,
+        "payment_method": "Cash",
+        "credit_card_last4": null
+      }
+    },
+    {
+      "doc_path": "docs/receipt-028.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "AutoZone",
+        "date": "2025-08-29",
+        "time": "10:30",
+        "line_items": [
+          {
+            "description": "Oil filter",
+            "quantity": 1,
+            "unit_price": 9.99,
+            "total": 9.99
+          },
+          {
+            "description": "Air filter",
+            "quantity": 1,
+            "unit_price": 19.99,
+            "total": 19.99
+          },
+          {
+            "description": "Wiper blades",
+            "quantity": 1,
+            "unit_price": 24.99,
+            "total": 24.99
+          },
+          {
+            "description": "Brake fluid",
+            "quantity": 1,
+            "unit_price": 8.99,
+            "total": 8.99
+          }
+        ],
+        "subtotal": 63.96,
+        "tax_amount": 5.23,
+        "tip_amount": 0.0,
+        "total": 69.19,
+        "payment_method": "Visa",
+        "credit_card_last4": "8811"
+      }
+    },
+    {
+      "doc_path": "docs/receipt-029.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "Glazed & Co",
+        "date": "2025-09-23",
+        "time": "08:00",
+        "line_items": [
+          {
+            "description": "Glazed donut",
+            "quantity": 6,
+            "unit_price": 1.5,
+            "total": 9.0
+          },
+          {
+            "description": "Boston cream",
+            "quantity": 1,
+            "unit_price": 2.75,
+            "total": 2.75
+          },
+          {
+            "description": "Coffee medium",
+            "quantity": 2,
+            "unit_price": 2.75,
+            "total": 5.5
+          }
+        ],
+        "subtotal": 17.25,
+        "tax_amount": 1.41,
+        "tip_amount": 0.0,
+        "total": 18.66,
+        "payment_method": "Cash",
+        "credit_card_last4": null
+      }
+    },
+    {
+      "doc_path": "docs/receipt-030.txt",
+      "schema": "Receipt",
+      "gold": {
+        "merchant_name": "The Local Pub",
+        "date": "2025-10-17",
+        "time": "23:15",
+        "line_items": [
+          {
+            "description": "Draft beer",
+            "quantity": 3,
+            "unit_price": 5.0,
+            "total": 15.0
+          },
+          {
+            "description": "Wings basket",
+            "quantity": 1,
+            "unit_price": 12.95,
+            "total": 12.95
+          },
+          {
+            "description": "Cocktail",
+            "quantity": 2,
+            "unit_price": 11.0,
+            "total": 22.0
+          }
+        ],
+        "subtotal": 49.95,
+        "tax_amount": 4.09,
+        "tip_amount": 9.99,
+        "total": 64.03,
+        "payment_method": "Visa",
+        "credit_card_last4": "9922"
+      }
+    }
+  ]
+}

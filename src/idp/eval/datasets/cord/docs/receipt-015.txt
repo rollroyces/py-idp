@@ -1,0 +1,18 @@
+Receipt - hardware store
+Date: 2025-05-19
+Time: 11:30
+
+Builders Depot
+200 Industrial Loop
+
+1  Wood screws box     $8.99
+1  Power drill bits    $15.49
+2  Sandpaper pack      $5.99
+1  Tape measure        $7.99
+
+Subtotal              $44.45
+Tax                    $3.64
+Tip                    $0.00
+Total                 $48.09
+
+Mastercard ****2244

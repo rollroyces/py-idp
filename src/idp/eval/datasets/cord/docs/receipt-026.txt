@@ -1,0 +1,18 @@
+Receipt - movie theater
+Date: 2025-06-08
+Time: 20:25
+
+Cineplex 12
+30 Theater Way
+
+2  Adult ticket        $12.00
+1  Child ticket        $10.00
+1  Large popcorn        $9.50
+2  Soft drink           $3.50
+
+Subtotal              $50.50
+Tax                    $4.13
+Tip                    $0.00
+Total                 $54.63
+
+Mastercard ****5566

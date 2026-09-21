@@ -1,0 +1,18 @@
+Receipt - sushi
+Date: 2025-03-08
+Time: 19:35
+
+Sakura Sushi
+17 Harbor Lane
+
+1  Tuna nigiri (5 pc)  $14.00
+1  Salmon roll         $9.50
+1  Miso soup           $3.50
+2  Green tea           $2.50
+
+Subtotal              $32.00
+Tax                    $2.72
+Tip                    $6.40
+Total                 $41.12
+
+Amex ****1031

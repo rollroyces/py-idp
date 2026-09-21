@@ -1,0 +1,16 @@
+Receipt - shoe store
+Date: 2025-02-23
+Time: 17:48
+
+Step Right
+275 Market Street
+
+1  Running shoes size 10 $89.99
+1  Athletic socks 3-pk    $12.50
+
+Subtotal             $102.49
+Tax                    $8.38
+Tip                    $0.00
+Total                $110.87
+
+Visa ****6644

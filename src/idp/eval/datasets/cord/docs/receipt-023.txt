@@ -1,0 +1,17 @@
+Receipt - pet store
+Date: 2025-03-15
+Time: 11:05
+
+Paws & Claws
+500 Bark Avenue
+
+1  Dog food 5kg         $39.99
+2  Cat toys              $4.49
+1  Pet shampoo          $12.50
+
+Subtotal              $61.47
+Tax                    $5.03
+Tip                    $0.00
+Total                 $66.50
+
+Mastercard ****8833

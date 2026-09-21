@@ -1,0 +1,19 @@
+Receipt - grocery with bulk qty
+Date: 2025-09-09
+Time: 16:33
+
+Harvest Grocery
+1500 Mill Road
+
+3  Banana organic      $0.69
+1  Avocado             $2.50
+2  Sourdough loaf      $4.50
+1  Olive oil 500ml    $14.99
+1  Almond butter      $11.49
+
+Subtotal              $40.05
+Tax                    $3.49
+Tip                    $0.00
+Total                 $43.54
+
+Visa ****7711
