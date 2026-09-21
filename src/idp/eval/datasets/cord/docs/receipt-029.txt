@@ -1,0 +1,17 @@
+Receipt - donut shop
+Date: 2025-09-23
+Time: 08:00
+
+Glazed & Co
+120 Sugar Lane
+
+6  Glazed donut         $1.50
+1  Boston cream         $2.75
+2  Coffee medium        $2.75
+
+Subtotal              $17.25
+Tax                    $1.41
+Tip                    $0.00
+Total                 $18.66
+
+Cash

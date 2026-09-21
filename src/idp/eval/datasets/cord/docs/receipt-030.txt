@@ -1,0 +1,17 @@
+Receipt - bar tab
+Date: 2025-10-17
+Time: 23:15
+
+The Local Pub
+19 Tap Street
+
+3  Draft beer           $5.00
+1  Wings basket        $12.95
+2  Cocktail            $11.00
+
+Subtotal              $49.95
+Tax                    $4.09
+Tip                    $9.99
+Total                 $64.03
+
+Visa ****9922

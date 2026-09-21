@@ -1,0 +1,16 @@
+Receipt - gas station (no line items, summary only)
+Date: 2025-06-17
+Time: 09:08
+
+Corner Gas
+Highway 9 Mile 14
+
+Fuel - Regular unleaded
+Gallons: 12.45
+Price per gallon: $3.89
+
+Subtotal              $48.43
+Tax                    $4.04
+Total                 $52.47
+
+Visa ****6677

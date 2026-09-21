@@ -1,0 +1,18 @@
+Receipt - taqueria
+Date: 2025-08-05
+Time: 13:25
+
+La Taqueria
+99 Mission Street
+
+3  Carnitas taco        $3.50
+2  Al pastor taco       $3.00
+1  Chips and guac       $7.50
+2  Horchata             $3.75
+
+Subtotal              $31.50
+Tax                    $2.58
+Tip                    $6.30
+Total                 $40.38
+
+Cash

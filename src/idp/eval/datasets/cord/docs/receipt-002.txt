@@ -1,0 +1,18 @@
+Receipt - quick service restaurant
+Date: 2025-02-19
+Time: 12:48
+
+Burger Spot
+901 Main Avenue
+
+2  Cheeseburger combo   $8.95
+1  Veggie wrap          $7.50
+1  Large fries          $3.25
+2  Soft drink           $2.50
+
+Subtotal              $33.65
+Tax                    $2.75
+Tip                    $0.00
+Total                 $36.40
+
+Mastercard ****7766

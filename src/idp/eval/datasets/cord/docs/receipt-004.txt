@@ -1,0 +1,17 @@
+Receipt - pharmacy
+Date: 2025-04-12
+Time: 10:22
+
+City Pharmacy
+301 Beacon Street
+
+1  Allergy tablets      $12.99
+1  Vitamin C 100 ct    $14.50
+1  Sunscreen SPF 50    $18.75
+
+Subtotal              $46.24
+Tax                    $3.78
+Tip                    $0.00
+Total                 $50.02
+
+Visa ****9982

@@ -1,0 +1,18 @@
+Receipt - convenience store (OCR-noisy)
+Date: 2025-08-14
+Time: 23:47
+
+Quick Mart 24
+210 0ak Street (note: OCR reads O as 0)
+
+1  Sandwich            $6.49
+1  C0ffee large        $3.29
+1  Bananas             $0.79
+1  Gum                 $1.99
+
+Subtota1              $12.56
+Tax                    $1.02
+Tip                    $0.00
+Tota1                 $13.58
+
+Cash

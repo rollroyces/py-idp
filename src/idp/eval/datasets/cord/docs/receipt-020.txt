@@ -1,0 +1,17 @@
+Receipt - hotel minibar
+Date: 2025-10-04
+Time: 22:33
+
+Grand Hotel - Room 412
+200 Bayview Boulevard
+
+1  Sparkling water       $5.00
+1  Chocolate bar         $4.50
+1  Pringles can          $6.00
+
+Subtotal              $15.50
+Tax                    $1.27
+Tip                    $0.00
+Total                 $16.77
+
+Visa ****9999

@@ -1,0 +1,17 @@
+Receipt - dry cleaner
+Date: 2025-05-14
+Time: 09:40
+
+Spotless Dry Cleaning
+67 Fabric Lane
+
+2  Shirt laundered       $3.00
+1  Suit pressed         $12.50
+1  Tie cleaned           $5.00
+
+Subtotal              $23.50
+Tax                    $1.92
+Tip                    $0.00
+Total                 $25.42
+
+Visa ****7001
