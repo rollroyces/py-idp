@@ -270,3 +270,161 @@ def test_app_sidebar_shows_metrics_with_results(tmp_path, monkeypatch):
     assert "total results" in sidebar_text
     assert "reviewed" in sidebar_text
     assert "pending" in sidebar_text
+
+
+# ---------------------------------------------------------------------------
+# v0.4 P3 — C3 additions: Triage page, side-by-side view, bulk-accept,
+# skip, histogram. The tests below pin the *contract*: each new UI piece
+# renders without error when reached.
+# ---------------------------------------------------------------------------
+def test_app_sidebar_includes_triage_page(tmp_storage) -> None:
+    """v0.4 D1: 'Triage' is now in the page radio."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    radios = at.sidebar.radio
+    assert len(radios) >= 1
+    options = list(radios[0].options)
+    assert "Triage" in options
+
+
+def test_app_navigates_to_triage_page(tmp_storage) -> None:
+    """Click 'Triage' in sidebar → triage page renders with header."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    at.sidebar.radio[0].set_value("Triage")
+    at.run()
+
+    assert not at.exception
+    headers = [h.body for h in at.header]
+    assert any("triage" in h.lower() for h in headers)
+
+
+def test_app_triage_page_renders_thresholds_with_no_data(tmp_storage) -> None:
+    """Empty storage → triage page shows the 'no errors detected' empty state."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    at.sidebar.radio[0].set_value("Triage")
+    at.run()
+
+    assert not at.exception
+    # The page surfaces the systematic-error count as a metric
+    # and the empty-state message when nothing is flagged.
+    success_msgs = [s.body for s in at.success]
+    assert any(
+        "No systematic errors detected" in m or "no errors" in m.lower()
+        for m in success_msgs
+    )
+
+
+def test_app_triage_page_with_reviewed_data_lists_systematic_errors(tmp_path, monkeypatch) -> None:
+    """With reviewed data showing a systematic pattern, the triage page
+    surfaces it as a DataFrame row. This is the v0.4 D1 user-visible win."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    # Set up reviewed data: 4 reviews, all corrected vendor_name.
+    data_dir = tmp_path / "idp_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_file = data_dir / "results.jsonl"
+    rows = []
+    for i in range(4):
+        rows.append({
+            "id": f"r{i}", "doc_id": f"d{i}", "schema_name": "Invoice",
+            "backend_name": "mock", "mode": "ocr_llm", "classification": "invoice",
+            "validation": {"passed": True}, "source_path": f"/tmp/{i}.pdf",
+            "created_at": 1000.0 + i,
+            "extraction": {"vendor_name": "ACME", "total_amount": 100.0},
+            "confidence": {"vendor_name": 0.7, "total_amount": 0.95},
+            "reviewed": True,
+            "reviewed_extraction": {"vendor_name": f"Acme {i}", "total_amount": 100.0},
+            "reviewer": "alice",
+            "last_reviewed_at": 1000.5 + i,
+        })
+    db_file.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    monkeypatch.setenv("IDP_STORAGE_BACKEND", "json")
+    monkeypatch.chdir(tmp_path)
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    at.sidebar.radio[0].set_value("Triage")
+    at.run()
+
+    assert not at.exception
+    # The systematic errors section header is rendered
+    subheaders = [sh.body for sh in at.subheader]
+    assert any("Systematic errors" in sh for sh in subheaders)
+    # The dataframe contains the vendor_name row
+    dfs_text = "\n".join(str(df.value) for df in at.dataframe)
+    assert "vendor_name" in dfs_text
+
+
+def test_app_queue_page_renders_side_by_side_and_buttons(tmp_path, monkeypatch) -> None:
+    """The review-queue page (C3 #1, #2, #3) renders the side-by-side
+    layout, the bulk-accept button, and the skip button when a result
+    is present."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    data_dir = tmp_path / "idp_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_file = data_dir / "results.jsonl"
+    db_file.write_text(json.dumps({
+        "id": "r1", "doc_id": "d1", "schema_name": "Invoice",
+        "backend_name": "mock", "mode": "ocr_llm", "classification": "invoice",
+        "validation": {"passed": True},
+        "source_path": "/tmp/inv.pdf", "created_at": 100.0,
+        "extraction": {"vendor_name": "Acme", "total_amount": 100.0},
+        "confidence": {"vendor_name": 0.95, "total_amount": 0.5},
+    }) + "\n")
+    monkeypatch.setenv("IDP_STORAGE_BACKEND", "json")
+    monkeypatch.chdir(tmp_path)
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    assert not at.exception
+    # Side-by-side header markers (model output / human-edited) rendered
+    md_text = "\n".join(str(m.value) for m in at.markdown)
+    assert "model output" in md_text
+    assert "human-edited" in md_text
+    # Bulk-accept and Skip buttons exist
+    button_labels = [str(b.label) for b in at.button]
+    assert any("Accept all" in lbl for lbl in button_labels)
+    assert any("Skip document" in lbl for lbl in button_labels)
+    # Confidence histogram caption rendered
+    captions = [str(c.body) for c in at.caption]
+    assert any("confidence histogram" in c for c in captions)
+
+
+def test_app_queue_page_keyboard_shortcuts_expander_exists(tmp_path, monkeypatch) -> None:
+    """C3 #5: keyboard-shortcut help expander renders when a result is shown."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    data_dir = tmp_path / "idp_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_file = data_dir / "results.jsonl"
+    db_file.write_text(json.dumps({
+        "id": "r1", "doc_id": "d1", "schema_name": "Invoice",
+        "backend_name": "mock", "mode": "ocr_llm", "classification": "invoice",
+        "validation": {"passed": True},
+        "source_path": "/tmp/inv.pdf", "created_at": 100.0,
+        "extraction": {"vendor_name": "Acme"},
+        "confidence": {"vendor_name": 0.95},
+    }) + "\n")
+    monkeypatch.setenv("IDP_STORAGE_BACKEND", "json")
+    monkeypatch.chdir(tmp_path)
+
+    at = AppTest.from_file(str(APP_PATH))
+    at.run()
+    expander_labels = [str(e.label) for e in at.expander]
+    # The keyboard-shortcut help expander is in the queue page
+    assert any("Keyboard shortcuts" in lbl for lbl in expander_labels)

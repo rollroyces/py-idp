@@ -375,6 +375,133 @@ def serve(
 
 
 @app.command()
+def triage(
+    storage: str | None = typer.Option(
+        None,
+        "--storage",
+        "-s",
+        help="Storage backend name (json | memory | sql) or a path to a "
+             "JsonFileStorage results.jsonl. Default: env IDP_STORAGE_BACKEND or json.",
+    ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help="Path for json backend (env: IDP_JSON_PATH). Default ./idp_data/results.jsonl.",
+    ),
+    db_url: str | None = typer.Option(
+        None,
+        "--db-url",
+        help="SQL URL for sql backend (env: IDP_DB_URL).",
+    ),
+    min_reviews: int = typer.Option(
+        3,
+        "--min-reviews",
+        help="Minimum reviews per field before we triage it. "
+             "Fields with fewer reviews land in the 'insufficient data' bucket.",
+    ),
+    threshold: float = typer.Option(
+        0.6,
+        "--threshold",
+        "-t",
+        help="Correction-rate cutoff for systematic-error flagging. "
+             "Default 0.6 (see ROADMAP_v0.4.md Q5).",
+    ),
+    output: str = typer.Option(
+        "json",
+        "--output",
+        "-o",
+        help="Output format: json (default) | md.",
+    ),
+    schema: str | None = typer.Option(
+        None,
+        "--schema",
+        help="Optional: filter reviews to a single schema (Invoice | ...). "
+             "Default: triage across all schemas.",
+    ),
+):
+    """Compute per-field correction rates from reviewed results.
+
+    Walks the configured storage, counts corrections per field across
+    reviewed StoredResults, and emits either a JSON report (default) or
+    a Markdown table. The report separates:
+
+      * "systematic errors" — fields corrected in >= ``--threshold`` of
+        >= ``--min-reviews`` reviews. The reviewer should treat these as
+        real model bugs and push back on the prompt/schema.
+      * "insufficient data" — fields reviewed fewer than ``--min_reviews``
+        times. We refuse to guess; the report says exactly how many more
+        reviews are needed.
+
+    Examples:
+      idp triage --storage json
+      idp triage --storage sql --db-url sqlite:///./idp.db --output md
+      idp triage --storage ./results.jsonl --threshold 0.8 --output md
+    """
+    from idp.hitl.triage import format_report_markdown
+    from idp.hitl.triage import triage as run_triage
+    from idp.storage import make_storage
+
+    if output not in ("json", "md"):
+        console.print(f"[red]error:[/red] --output must be 'json' or 'md', got {output!r}")
+        raise typer.Exit(code=1)
+
+    # Resolve the storage backend. ``--storage`` doubles as either a
+    # backend name (json/sql/memory) or a filesystem path to a JSONL
+    # file — the latter is the most ergonomic UX for the common
+    # JsonFileStorage case.
+    KNOWN_BACKENDS = {
+        "json", "memory", "mem", "sql", "sqlite", "postgres", "postgresql",
+    }
+    backend_name: str | None
+    if storage and storage not in KNOWN_BACKENDS:
+        # Treat as a path to a JsonFileStorage file.
+        json_path = storage
+        backend_name = "json"
+    else:
+        backend_name = storage  # may be None; make_storage handles the env fallback
+
+    try:
+        backend = make_storage(backend=backend_name, json_path=json_path, db_url=db_url)
+    except (ValueError, ImportError) as e:
+        console.print(f"[red]storage error:[/red] {e}")
+        raise typer.Exit(code=1) from None
+
+    report = run_triage(
+        backend,
+        min_reviews=min_reviews,
+        threshold=threshold,
+    )
+
+    # Schema filtering is applied post-walk because triage() walks
+    # the whole reviewed set. The cost of filtering after vs during
+    # is negligible; doing it after keeps the public API simple.
+    if schema is not None:
+        report = _filter_report_by_schema(backend, report, schema)
+
+    if output == "json":
+        console.print_json(json.dumps(report.to_dict(), indent=2))
+    else:
+        console.print(format_report_markdown(report), markup=False)
+
+
+def _filter_report_by_schema(backend, report: TriageReport, schema: str) -> TriageReport:  # type: ignore[name-defined]  # noqa: F821
+    """Re-walk the storage scoped to a single schema.
+
+    TriageReport is recomputed from scratch using only the filtered
+    results — that's simpler than trying to subtract schema-foreign
+    counts from the existing report.
+    """
+    from idp.hitl.triage import triage_from_results
+
+    scoped = backend.list(reviewed_only=True, schema_name=schema, limit=100000)
+    return triage_from_results(
+        scoped,
+        min_reviews=report.min_reviews,
+        threshold=report.threshold,
+    )
+
+
+@app.command()
 def eval(
     dataset: str = typer.Option(..., help="Path to src/idp/eval/datasets/<name>"),
     strategy: str = typer.Option("mock", help="Comma-separated backends to compare: mock,ollama,openai"),
