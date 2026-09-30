@@ -51,10 +51,14 @@ v0.4 scope (per ``docs/ROADMAP_v0.4.md`` Q6): local-only, no streaming.
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
+from idp.errors import BackendUnavailableError, TimeoutError_
 from idp.llm.backend import Backend, CompletionRequest, Message
+
+_log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:11434"
 """Default Ollama server URL — Ollama's documented default on install."""
@@ -162,15 +166,58 @@ class OllamaBackend(Backend):
             body["format"] = "json"
 
         with httpx.Client(timeout=self.timeout) as client:
-            r = client.post(f"{self.base_url}/api/chat", json=body)
-            r.raise_for_status()
-            data = r.json()
+            try:
+                r = client.post(f"{self.base_url}/api/chat", json=body)
+                r.raise_for_status()
+                data = r.json()
+            except httpx.TimeoutException as e:
+                _log.warning(
+                    "OllamaBackend(%s) timed out after %.1fs: %s",
+                    self.model, self.timeout, e,
+                )
+                raise TimeoutError_(
+                    f"backend {self.name!r} timed out after {self.timeout:.1f}s",
+                ) from e
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code if e.response is not None else "?"
+                _log.warning(
+                    "OllamaBackend(%s) HTTP %s: %s",
+                    self.model, status, e,
+                )
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} HTTP {status}",
+                ) from e
+            except httpx.RequestError as e:
+                _log.warning(
+                    "OllamaBackend(%s) request error: %s",
+                    self.model, e,
+                )
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} unreachable: {e}",
+                ) from e
+            except (KeyError, ValueError) as e:
+                _log.error(
+                    "OllamaBackend(%s) returned malformed JSON: %s",
+                    self.model, e,
+                )
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} returned malformed JSON: {e}",
+                ) from e
 
         # Ollama's /api/chat response: {"message": {"role": "assistant",
         # "content": "..."}, "done": true, ...}
-        msg = data.get("message") or {}
-        content = msg.get("content", "")
-        return content if isinstance(content, str) else str(content)
+        try:
+            msg = data.get("message") or {}
+            content = msg.get("content", "")
+            return content if isinstance(content, str) else str(content)
+        except (AttributeError, TypeError) as e:
+            _log.error(
+                "OllamaBackend(%s) response missing message.content: %s",
+                self.model, e,
+            )
+            raise BackendUnavailableError(
+                f"backend {self.name!r} response missing message content",
+            ) from e
 
 
 def _msg_to_ollama(m: Message) -> dict[str, Any]:

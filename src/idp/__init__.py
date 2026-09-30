@@ -27,7 +27,21 @@ from idp.batch import BatchItemResult, process_batch
 from idp.console import pretty_print_result
 from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
-from idp.errors import IDPError, error_envelope
+from idp.errors import (
+    IDPError,
+    OCRError,
+    TimeoutError_,
+    FileTooLargeError,
+    classify_status,
+    docs_url_for,
+    error_envelope,
+    format_error,
+    hint_for,
+    is_idp_error,
+    is_transient,
+    safe_call,
+    wrap,
+)
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 from idp.templates import Template, TemplateRegistry, load_template
 
@@ -41,15 +55,26 @@ __all__ = [
     "Block",
     "DiscoveryResult",
     "Document",
+    "FileTooLargeError",
     "IDPError",
+    "OCRError",
     "Page",
     "Pipeline",
     "PipelineResult",
     "Template",
     "TemplateRegistry",
+    "TimeoutError_",
+    "classify_status",
     "discover_schema",
+    "docs_url_for",
     "error_envelope",
+    "format_error",
+    "hint_for",
+    "is_idp_error",
+    "is_transient",
     "load_template",
     "pretty_print_result",
     "process_batch",
+    "safe_call",
+    "wrap",
 ]
