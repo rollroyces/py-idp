@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
@@ -43,9 +44,14 @@ from idp.config import Settings
 from idp.core.document import Document
 from idp.errors import (
     ConfigurationError,
+    FileTooLargeError,
     IDPError,
+    OCRError,
     RateLimitedError,
+    TimeoutError_,
+    classify_status,
     error_envelope,
+    format_error,
 )
 from idp.metrics import metrics
 from idp.pipeline.pipeline import Pipeline
@@ -472,6 +478,33 @@ async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
 # Mapping them through our envelope would break the OpenAPI spec.
 
 
+@app.exception_handler(FileTooLargeError)
+async def file_too_large_handler(request: Request, exc: FileTooLargeError) -> JSONResponse:
+    """413 + envelope. Distinct from validation -- payload size is fixable client-side."""
+    return JSONResponse(
+        status_code=413,
+        content=error_envelope(exc, request_id=_request_id(request)),
+    )
+
+
+@app.exception_handler(OCRError)
+async def ocr_error_handler(request: Request, exc: OCRError) -> JSONResponse:
+    """502 + envelope for OCR-stage failures."""
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=error_envelope(exc, request_id=_request_id(request)),
+    )
+
+
+@app.exception_handler(TimeoutError_)
+async def timeout_handler(request: Request, exc: TimeoutError_) -> JSONResponse:
+    """504 + envelope for any operation that exceeded its budget."""
+    return JSONResponse(
+        status_code=504,
+        content=error_envelope(exc, request_id=_request_id(request)),
+    )
+
+
 @app.exception_handler(RateLimitedError)
 async def rate_limit_handler(request: Request, exc: RateLimitedError) -> JSONResponse:
     """429 + structured envelope. Add Retry-After header."""
@@ -486,6 +519,50 @@ async def idp_error_handler(request: Request, exc: IDPError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.http_status,
         content=error_envelope(exc, request_id=_request_id(request)),
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Wrap FastAPI/Starlette ``HTTPException`` in the project envelope.
+
+    Code is derived from the status code (e.g. 404 -> ``IDP-CLIENT-404``)
+    so the envelope carries the same shape regardless of which layer
+    raised the exception.
+    """
+    code = classify_status(exc.status_code)
+    # Preserve the original ``detail`` message when possible.
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    env_exc = IDPError(detail)
+    env_exc.code = code  # type: ignore[assignment]
+    env = error_envelope(env_exc, request_id=_request_id(request))
+    return JSONResponse(status_code=exc.status_code, content=env, headers=exc.headers or {})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all for any non-IDP, non-HTTP exception.
+
+    Logs the traceback at ``.exception`` and returns a clean 500 with
+    the framework's envelope so clients never see an HTML error page
+    or an unstructured string. Re-raises ``HTTPException`` so its
+    handler can run (FastAPI routes them through here otherwise).
+    """
+    if isinstance(exc, (HTTPException, StarletteHTTPException)):
+        # FastAPI will route HTTPException through this handler before its
+        # own; let Starlette's built-in handler handle it.
+        raise exc
+    _log.exception(
+        "unhandled exception in %s %s rid=%s: %s",
+        request.method, request.url.path, _request_id(request), exc,
+    )
+    # Build a stable envelope. Message is generic -- the real traceback
+    # is in the logs.
+    env_exc = IDPError("internal server error")
+    env_exc.code = "IDP-INT-001"  # type: ignore[assignment]
+    return JSONResponse(
+        status_code=500,
+        content=error_envelope(env_exc, request_id=_request_id(request)),
     )
 
 

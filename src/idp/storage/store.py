@@ -27,6 +27,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from idp.errors import StorageError
+
 log = logging.getLogger(__name__)
 
 
@@ -200,8 +202,14 @@ class JsonFileStorage(Storage):
             result.id = uuid.uuid4().hex[:16]
         if not result.created_at:
             result.created_at = time.time()
-        with self._lock, self.path.open("a") as f:
-            f.write(json.dumps(asdict(result), default=str) + "\n")
+        try:
+            with self._lock, self.path.open("a") as f:
+                f.write(json.dumps(asdict(result), default=str) + "\n")
+        except OSError as e:
+            log.error("JsonFileStorage.put failed for %s: %s", self.path, e)
+            raise StorageError(
+                f"could not append to {self.path}: {e}",
+            ) from e
         # Cache is now stale; drop it. The next read will rebuild.
         self._invalidate_cache()
         return result.id
@@ -252,7 +260,13 @@ class JsonFileStorage(Storage):
         original.reviewed_extraction = edited
         original.reviewer = reviewer
         original.last_reviewed_at = _t.time()
-        with self._lock, self.path.open("a") as f:
-            f.write(json.dumps(asdict(original), default=str) + "\n")
+        try:
+            with self._lock, self.path.open("a") as f:
+                f.write(json.dumps(asdict(original), default=str) + "\n")
+        except OSError as e:
+            log.error("JsonFileStorage.mark_reviewed failed for %s: %s", self.path, e)
+            raise StorageError(
+                f"could not append review for {result_id}: {e}",
+            ) from e
         # Cache is now stale (the new append could shadow an earlier entry)
         self._invalidate_cache()

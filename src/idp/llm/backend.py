@@ -23,10 +23,15 @@ from __future__ import annotations
 
 import abc
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, cast
+
+from idp.errors import BackendUnavailableError, TimeoutError_, safe_call
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -180,10 +185,59 @@ class OpenAICompatBackend(Backend):
 
         headers = {"Authorization": f"Bearer {self.api_key}"}
         with httpx.Client(timeout=self.timeout) as client:
-            r = client.post(f"{self.base_url}/chat/completions", json=body, headers=headers)
-            r.raise_for_status()
-            data = r.json()
-        return data["choices"][0]["message"]["content"]
+            try:
+                r = client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=body,
+                    headers=headers,
+                )
+                r.raise_for_status()
+                data = r.json()
+            except httpx.TimeoutException as e:
+                _log.warning(
+                    "OpenAICompatBackend(%s) timed out after %.1fs: %s",
+                    self.model, self.timeout, e,
+                )
+                raise TimeoutError_(
+                    f"backend {self.name!r} timed out after {self.timeout:.1f}s",
+                ) from e
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code if e.response is not None else "?"
+                _log.warning(
+                    "OpenAICompatBackend(%s) HTTP %s: %s",
+                    self.model, status, e,
+                )
+                # Surface as BackendUnavailableError so the FastAPI handler
+                # maps to a clean 502 envelope instead of a 500.
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} HTTP {status}",
+                ) from e
+            except httpx.RequestError as e:
+                _log.warning(
+                    "OpenAICompatBackend(%s) request error: %s",
+                    self.model, e,
+                )
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} unreachable: {e}",
+                ) from e
+            except (KeyError, ValueError) as e:
+                _log.error(
+                    "OpenAICompatBackend(%s) returned malformed payload: %s",
+                    self.model, e,
+                )
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} returned malformed payload: {e}",
+                ) from e
+        try:
+            return data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as e:
+            _log.error(
+                "OpenAICompatBackend(%s) response missing choices[0].message.content: %s",
+                self.model, e,
+            )
+            raise BackendUnavailableError(
+                f"backend {self.name!r} response missing message content",
+            ) from e
 
 
 def _msg_to_openai(m: Message) -> dict[str, Any]:
@@ -258,8 +312,44 @@ class AnthropicBackend(Backend):
         }
         if system:
             kwargs["system"] = system
-        resp = client.messages.create(**kwargs)  # type: ignore[union-attr]
-        return resp.content[0].text  # type: ignore[union-attr]
+        try:
+            resp = client.messages.create(**kwargs)  # type: ignore[union-attr]
+        except Exception as e:  # anthropic SDK raises its own hierarchy
+            name = type(e).__name__
+            msg = str(e).lower()
+            status = getattr(e, "status_code", None)
+            # Anthropic SDK raises anthropic.APIStatusError for HTTP errors.
+            if "timeout" in msg or "timed out" in msg or status == 408:
+                _log.warning("AnthropicBackend(%s) timed out: %s", self.model, e)
+                raise TimeoutError_(
+                    f"backend {self.name!r} timed out",
+                ) from e
+            if status in (401, 403) or "auth" in msg or "api key" in msg:
+                # Non-transient -- let caller surface it cleanly.
+                _log.error("AnthropicBackend(%s) auth failure: %s", self.model, e)
+                raise BackendUnavailableError(
+                    f"backend {self.name!r} auth failed",
+                ) from e
+            # Everything else (429, 5xx, network) is treated as a
+            # transient/unavailable backend failure. RetryingBackend /
+            # safe_call downstream decides what to do with it.
+            _log.warning(
+                "AnthropicBackend(%s) call failed (status=%s): %s",
+                self.model, status, e,
+            )
+            raise BackendUnavailableError(
+                f"backend {self.name!r} call failed: {e}",
+            ) from e
+        try:
+            return resp.content[0].text  # type: ignore[union-attr]
+        except (AttributeError, IndexError, TypeError) as e:
+            _log.error(
+                "AnthropicBackend(%s) returned unexpected payload: %s",
+                self.model, e,
+            )
+            raise BackendUnavailableError(
+                f"backend {self.name!r} returned unexpected payload",
+            ) from e
 
 
 def _msg_to_anthropic(m: Message) -> Any:

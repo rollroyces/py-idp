@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from idp.core.document import Document, Page
+from idp.errors import DocumentParseError
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,18 @@ class PlainTextParser:
 
     def parse(self, path: str | Path) -> dict[str, Any]:
         p = Path(path)
-        text = p.read_text(encoding="utf-8", errors="ignore")
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+            size = p.stat().st_size
+        except FileNotFoundError as e:
+            log.warning("PlainTextParser: file not found: %s", p)
+            raise DocumentParseError(f"file not found: {p}") from e
+        except PermissionError as e:
+            log.warning("PlainTextParser: permission denied: %s", p)
+            raise DocumentParseError(f"permission denied: {p}") from e
+        except OSError as e:
+            log.warning("PlainTextParser: read error on %s: %s", p, e)
+            raise DocumentParseError(f"could not read {p}: {e}") from e
         # Synthetic "pages" = chunks of ~3000 chars (LLM token windowing heuristic)
         chunk = 3000
         pages: list[dict[str, Any]] = []
@@ -67,7 +79,7 @@ class PlainTextParser:
             "text": text,
             "pages": pages,
             "tables": [],
-            "metadata": {"parser": "plain", "size": p.stat().st_size},
+            "metadata": {"parser": "plain", "size": size},
         }
 
 
@@ -130,7 +142,13 @@ class DoclingParser:
         self._converter = DocumentConverter()
 
     def parse(self, path: str | Path) -> dict[str, Any]:
-        result = self._converter.convert(str(path))
+        try:
+            result = self._converter.convert(str(path))
+        except Exception as e:
+            log.warning("DoclingParser: convert failed for %s: %s", path, e)
+            raise DocumentParseError(
+                f"docling convert failed for {path}: {e}",
+            ) from e
         doc = result.document
         text = doc.export_to_markdown()
         # Docling produces a single concatenated text for v1; split by form-feed
@@ -151,18 +169,28 @@ class DoclingParser:
         # Docling returns tables at the top level
         tables = []
         for i, t in enumerate(getattr(doc, "tables", []) or []):
+            try:
+                markdown = t.export_to_markdown() if hasattr(t, "export_to_markdown") else ""
+            except Exception as e:  # noqa: BLE001 - docling can raise on partial tables
+                log.debug("DoclingParser: table %d export failed: %s", i, e)
+                markdown = ""
             tables.append(
                 {
                     "page": i,
-                    "rows": getattr(t, "data", []),
-                    "markdown": t.export_to_markdown() if hasattr(t, "export_to_markdown") else "",
+                    "rows": getattr(t, "data", []) or [],
+                    "markdown": markdown,
                 }
             )
+        try:
+            size = Path(path).stat().st_size
+        except OSError as e:
+            log.debug("DoclingParser: stat failed for %s: %s", path, e)
+            size = 0
         return {
             "text": text,
             "pages": pages if pages else [{"page": 1, "text": text, "image_path": None}],
             "tables": tables,
-            "metadata": {"parser": "docling", "size": Path(path).stat().st_size},
+            "metadata": {"parser": "docling", "size": size},
         }
 
 
