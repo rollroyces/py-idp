@@ -202,9 +202,18 @@ def _parse_frontmatter(text: str, source_path: Path) -> tuple[dict[str, Any], st
 def load_template(path: Path) -> Template:
     """Load a single ``.md`` file into a :class:`Template`.
 
-    Raises :class:`TemplateParseError` on any malformation.
+    Raises :class:`TemplateParseError` on any malformation (including
+    missing files / permission denied -- mapped from ``OSError`` so
+    callers see one consistent error type).
     """
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as e:
+        raise TemplateParseError(f"template not found: {path}") from e
+    except PermissionError as e:
+        raise TemplateParseError(f"permission denied reading {path}") from e
+    except OSError as e:
+        raise TemplateParseError(f"could not read {path}: {e}") from e
     fm, body = _parse_frontmatter(text, path)
     # `name` is required to be a string and must match the filename stem
     name = str(fm["name"])

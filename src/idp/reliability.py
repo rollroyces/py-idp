@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from idp.errors import IDPError, is_transient
 from idp.llm.backend import Backend, CompletionRequest
 
 log = logging.getLogger(__name__)
@@ -418,6 +419,87 @@ class CachingBackend:
         return response
 
 
+# ---------------------------------------------------------------------------
+# Generic retry-with-backoff decorator
+# ---------------------------------------------------------------------------
+def retry_with_backoff(
+    config: RetryConfig | None = None,
+    *,
+    on: tuple[type[BaseException], ...] = (Exception,),
+    default_idp_error: type[IDPError] | None = None,
+):
+    """Decorator: retry ``on`` exception types with exponential backoff.
+
+    Unlike :class:`RetryingBackend` (which is LLM-specific), this is a
+    drop-in decorator for any risky call: OCR inference, schema validation
+    against a flaky upstream registry, HTTP fetch of a PDF, etc.
+
+    Args:
+        config: retry policy. Defaults to a ``RetryConfig()`` (4 attempts,
+            1-30s exponential, +/-20% jitter).
+        on: exception types that should cause a retry. ``IDPError`` with
+            ``http_status < 500`` (i.e. client errors) is *always*
+            excluded -- retrying a 404 won't help.
+        default_idp_error: if set, raise this on the final attempt after
+            converting the last underlying exception. Useful when you
+            want a unified exception type flowing up to the caller.
+
+    Example::
+
+        @retry_with_backoff()
+        def fetch_pdf(url: str) -> bytes:
+            ...
+
+        @retry_with_backoff(
+            config=RetryConfig(max_retries=2, initial_delay_sec=0.5),
+            default_idp_error=OCRError,
+        )
+        def run_ocr(image: bytes) -> str:
+            ...
+    """
+    import functools as _ft
+
+    cfg = config or RetryConfig()
+
+    def decorator(fn):
+        @_ft.wraps(fn)
+        def wrapper(*args, **kwargs):
+            last_exc: BaseException | None = None
+            for attempt in range(cfg.max_retries):
+                try:
+                    return fn(*args, **kwargs)
+                except on as e:
+                    last_exc = e
+                    # Don't retry client-side IDP errors -- they'll
+                    # fail the same way on retry.
+                    if isinstance(e, IDPError) and 400 <= getattr(e, "http_status", 500) < 500:
+                        raise
+                    if not is_transient(e):
+                        raise
+                    if attempt + 1 >= cfg.max_retries:
+                        log.warning(
+                            "retry_with_backoff(%s): gave up after %d attempts: %s",
+                            fn.__qualname__, cfg.max_retries, e,
+                        )
+                        break
+                    delay = cfg.delay_for(attempt + 1)
+                    log.info(
+                        "retry_with_backoff(%s): %s on attempt %d/%d, retrying in %.2fs",
+                        fn.__qualname__, type(e).__name__,
+                        attempt + 1, cfg.max_retries, delay,
+                    )
+                    time.sleep(delay)
+            # Final attempt failed.
+            assert last_exc is not None
+            if default_idp_error is not None:
+                raise default_idp_error(
+                    f"{fn.__qualname__} failed after {cfg.max_retries} attempts: {last_exc}",
+                ) from last_exc
+            raise last_exc
+        return wrapper
+    return decorator
+
+
 __all__ = [
     "ExtractionError",
     "RateLimitError",
@@ -428,6 +510,7 @@ __all__ = [
     "classify_exception",
     "RetryConfig",
     "RetryingBackend",
+    "retry_with_backoff",
     "hash_request",
     "ExtractionCache",
     "CachingBackend",
