@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>py-idp · Document Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="static/styles.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════ Static-demo banner ═══════════════════════════ -->
+  <div class="static-demo-banner" role="status" aria-live="polite">
+    <span class="static-demo-icon" aria-hidden="true">ℹ️</span>
+    <span class="static-demo-text">
+      <strong>Static UI build.</strong> No backend is hosted here — by default this talks to
+      <em>same-origin</em> only. To use a remote backend, set
+      <strong>Backend URL</strong> in the sidebar (or open with <code>?api_base=…&amp;api_key=…</code>).
+      For the full self-hosted app, run
+      <code>git clone https://github.com/rollroyces/py-idp.git &amp;&amp; cd py-idp &amp;&amp; ./start.sh</code>
+      and open <code>http://localhost:8080</code>.
+    </span>
+    <button class="static-demo-dismiss" type="button" aria-label="Dismiss banner">×</button>
+  </div>
+
+  <!-- ═══════════════════════════ Sidebar ═══════════════════════════ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">📄</div>
+      <div class="brand-text">
+        <div class="brand-title">py-idp</div>
+        <div class="brand-sub">Document Intelligence</div>
+      </div>
+    </div>
+
+    <nav class="nav-list" role="tablist" aria-label="Main navigation">
+      <button class="nav-item is-active" data-tab="extract">
+        <span class="nav-icon">✦</span>
+        <span class="nav-label">Extract</span>
+        <span class="nav-kbd">E</span>
+      </button>
+      <button class="nav-item" data-tab="batch">
+        <span class="nav-icon">▦</span>
+        <span class="nav-label">Batch</span>
+        <span class="nav-kbd">B</span>
+      </button>
+      <button class="nav-item" data-tab="review">
+        <span class="nav-icon">✎</span>
+        <span class="nav-label">HITL Review</span>
+        <span class="nav-nav-badge" id="nav-review-badge" hidden>0</span>
+      </button>
+      <button class="nav-item" data-tab="history">
+        <span class="nav-icon">⏱</span>
+        <span class="nav-label">History</span>
+      </button>
+      <button class="nav-item" data-tab="templates">
+        <span class="nav-icon">◫</span>
+        <span class="nav-label">Templates</span>
+      </button>
+      <button class="nav-item" data-tab="about">
+        <span class="nav-icon">ⓘ</span>
+        <span class="nav-label">About</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <label class="sidebar-field" for="api-base-url" title="Remote backend URL when this UI is served from a different host than the API. e.g. https://idp.example.com">
+        <span class="sidebar-field-label">Backend URL</span>
+        <input
+          type="url"
+          id="api-base-url"
+          class="sidebar-field-input"
+          placeholder="(same origin)"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <span class="sidebar-field-hint">Empty = same-origin (use with <code>./start.sh</code>). Set this when the UI is hosted separately from the API (e.g. on GitHub Pages). CORS must allow this origin on the backend.</span>
+      </label>
+
+      <div class="status-pill" id="status-pill" data-state="loading">
+        <span class="dot"></span>
+        <span id="status-text">connecting…</span>
+      </div>
+      <p class="sidebar-status" id="status-line">v0.4.0 · mock</p>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════ Main ═══════════════════════════ -->
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="breadcrumb" id="breadcrumb">Document Intelligence</div>
+        <h1 class="page-title" id="page-title">Extract</h1>
+      </div>
+      <div class="topbar-actions">
+        <div class="reviewer-field">
+          <label for="reviewer-name-top">Reviewer</label>
+          <input id="reviewer-name-top" type="text" placeholder="your name" />
+        </div>
+      </div>
+    </header>
+
+    <!-- ───────────── Extract ───────────── -->
+    <section class="view is-active" data-view="extract">
+      <div class="extract-grid">
+
+        <!-- LEFT: upload + settings -->
+        <div class="extract-left">
+          <div id="drop-single" class="dropzone">
+            <div class="dz-icon">⬆</div>
+            <p class="dz-title">Drop a document</p>
+            <p class="dz-sub">PDF, image, or text — or</p>
+            <label class="btn-primary">
+              Choose file
+              <input id="file-single" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" hidden />
+            </label>
+            <p class="dz-name subtle" id="file-single-name">No file selected</p>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-title">Extraction</div>
+
+            <div class="field">
+              <label for="schema-picker">Schema</label>
+              <div class="select-wrap">
+                <select id="schema-picker">
+                  <option value="">Auto · match by filename</option>
+                  <option value="Invoice">Invoice</option>
+                  <option value="Contract">Contract</option>
+                  <option value="BankStatement">Bank Statement</option>
+                  <option value="Receipt">Receipt</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="backend-picker">Model</label>
+              <div class="select-wrap">
+                <select id="backend-picker">
+                  <option value="">Server default</option>
+                  <option value="mock">mock · no API key</option>
+                  <option value="ollama">ollama · local</option>
+                  <option value="openai">openai · gpt-4o</option>
+                  <option value="anthropic">anthropic · claude</option>
+                </select>
+              </div>
+            </div>
+
+            <button class="btn-primary big" id="btn-run-extract" disabled>
+              <span class="btn-label">Extract document</span>
+              <span class="btn-arrow">→</span>
+            </button>
+            <button class="btn-ghost" id="btn-clear-extract">Clear</button>
+          </div>
+
+          <div id="extract-progress" class="progress hidden">
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+            <div class="progress-label">Running pipeline…</div>
+          </div>
+        </div>
+
+        <!-- CENTER: document preview -->
+        <div class="extract-center">
+          <div class="preview-frame" id="preview-frame">
+            <!-- Empty state -->
+            <div class="preview-empty" id="preview-empty">
+              <svg viewBox="0 0 120 120" class="empty-svg" aria-hidden="true">
+                <rect x="22" y="18" width="76" height="92" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="32" y1="38" x2="80" y2="38" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="32" y1="50" x2="88" y2="50" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="32" y1="62" x2="74" y2="62" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="32" y1="74" x2="82" y2="74" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="32" y1="86" x2="60" y2="86" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              <h2>No document yet</h2>
+              <p>Drop a file on the left, or paste with <kbd>⌘V</kbd></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: extracted fields + review -->
+        <div class="extract-right">
+          <div class="result-card" id="extract-result">
+            <div class="result-empty">
+              <svg viewBox="0 0 120 120" class="empty-svg" aria-hidden="true">
+                <circle cx="60" cy="60" r="40" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M44 60 L54 70 L78 46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2>Results will appear here</h2>
+              <p>Upload a document, then press <strong>Extract</strong>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Batch ───────────── -->
+    <section class="view" data-view="batch">
+      <div class="batch-grid">
+        <div class="card">
+          <div class="card-head">
+            <h2>Batch queue</h2>
+            <p class="subtle">Drag to reorder · runs in parallel</p>
+          </div>
+
+          <div id="drop-batch" class="dropzone compact">
+            <div class="dz-icon">▦</div>
+            <p class="dz-title">Drop files here</p>
+            <p class="dz-sub">PDF, image, text — or</p>
+            <label class="btn-primary">
+              Choose files
+              <input id="file-batch" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.md" hidden />
+            </label>
+            <p class="dz-name subtle" id="file-batch-count">No files queued</p>
+          </div>
+
+          <div class="batch-controls">
+            <div class="field">
+              <label for="batch-schema">Schema</label>
+              <div class="select-wrap">
+                <select id="batch-schema">
+                  <option value="">Auto · match by filename</option>
+                  <option value="Invoice">Invoice</option>
+                  <option value="Contract">Contract</option>
+                  <option value="BankStatement">Bank Statement</option>
+                  <option value="Receipt">Receipt</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="batch-concurrency">Concurrency</label>
+              <div class="select-wrap">
+                <select id="batch-concurrency">
+                  <option value="1">1 · sequential</option>
+                  <option value="2" selected>2</option>
+                  <option value="4">4</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="batch-actions">
+            <button class="btn-ghost" id="btn-clear-batch">Clear</button>
+            <button class="btn-primary" id="btn-run-batch" disabled>Run batch →</button>
+          </div>
+
+          <div id="batch-queue" class="queue"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── HITL Review ───────────── -->
+    <section class="view" data-view="review">
+      <div class="card">
+        <div class="card-head">
+          <h2>Human-in-the-loop review</h2>
+          <button class="btn-ghost small" id="btn-refresh-corrections">Refresh</button>
+        </div>
+        <p class="subtle">When extraction flags a field with confidence &lt; 0.6, it lands here. Edit values, write a note, then save — your edits go to <code>data/corrections.jsonl</code>.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Low-confidence fields</h2></div>
+        <div id="review-fields" class="review-empty">
+          <p class="subtle">Run an extraction first — low-confidence fields will appear here.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Saved corrections</h2></div>
+        <div id="corrections-list" class="corrections-empty">
+          <p class="subtle">No corrections saved yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── History ───────────── -->
+    <section class="view" data-view="history">
+      <div class="card">
+        <div class="card-head">
+          <h2>Past runs</h2>
+          <button class="btn-ghost small" id="btn-clear-history">Clear history</button>
+        </div>
+        <div id="history-list" class="history-empty">
+          <p class="subtle">No runs yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Templates ───────────── -->
+    <section class="view" data-view="templates">
+      <div class="card">
+        <div class="card-head">
+          <h2>Registered templates</h2>
+          <p class="subtle">Matched by filename / MIME to steer the LLM prompt per PDF type.</p>
+        </div>
+        <div id="templates-list" class="templates-loading">
+          <p class="subtle">Loading…</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── About ───────────── -->
+    <section class="view" data-view="about">
+      <div class="card about-card">
+        <h2>About this service</h2>
+        <p class="lead">A web wrapper around <a href="https://github.com/rollroyces/py-idp" target="_blank" rel="noopener">py-idp</a> — a six-stage document-intelligence pipeline. Runs locally; no data leaves your machine.</p>
+
+        <div class="about-grid">
+          <div>
+            <h3>Endpoints</h3>
+            <ul class="endpoint-list">
+              <li><code>POST /extract</code> · upload → fields + confidence</li>
+              <li><code>GET /templates</code> · list templates</li>
+              <li><code>GET /templates/{name}</code> · template + Markdown</li>
+              <li><code>POST /api/correct</code> · save HITL correction</li>
+              <li><code>GET /api/history</code> · past runs (last 50)</li>
+              <li><code>GET /api/corrections</code> · saved corrections</li>
+              <li><code>/healthz · /readyz · /version · /metrics</code></li>
+            </ul>
+          </div>
+          <div>
+            <h3>Backends</h3>
+            <ul>
+              <li><code>mock</code> · zero-config, no API keys</li>
+              <li><code>ollama</code> · local models</li>
+              <li><code>openai · anthropic</code> · cloud APIs</li>
+              <li><code>china:&lt;name&gt;</code> · 8 China LLMs</li>
+              <li><code>hf-vlm</code> · self-hosted OCR</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Schemas</h3>
+            <ul>
+              <li><code>Invoice</code> · <code>Contract</code> · <code>BankStatement</code> · <code>Receipt</code></li>
+              <li>Or bring your own Pydantic schema</li>
+            </ul>
+          </div>
+        </div>
+
+        <p class="copyright">© py-idp · AGPL-3.0-or-later · commercial license available</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="static/app.js"></script>
+</body>
+</html>
