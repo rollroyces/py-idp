@@ -98,7 +98,7 @@ def _json_dump(v: Any) -> Any:
 def _json_load(v: Any) -> Any:
     if v is None:
         return None
-    if isinstance(v, (dict, list)):
+    if isinstance(v, dict | list):
         return v
     return json.loads(v)
 

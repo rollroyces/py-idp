@@ -18,11 +18,17 @@ from idp.llm.backend import (
     MockBackend,
     OpenAICompatBackend,
     get_backend,
+    list_backends,
 )
 from idp.llm.china import (
     CHINA_PROVIDER_PRESETS,
     get_china_backend,
     list_china_providers,
+)
+from idp.llm.international import (
+    INTERNATIONAL_PROVIDER_PRESETS,
+    get_international_backend,
+    list_international_providers,
 )
 from idp.llm.ollama import OllamaBackend
 from idp.llm.tiered import TieredBackend, TieredBackendExhaustedError
@@ -32,6 +38,7 @@ __all__ = [
     "Backend",
     "CHINA_PROVIDER_PRESETS",
     "CompletionRequest",
+    "INTERNATIONAL_PROVIDER_PRESETS",
     "Message",
     "MockBackend",
     "OllamaBackend",
@@ -40,5 +47,8 @@ __all__ = [
     "TieredBackendExhaustedError",
     "get_backend",
     "get_china_backend",
+    "get_international_backend",
+    "list_backends",
     "list_china_providers",
+    "list_international_providers",
 ]

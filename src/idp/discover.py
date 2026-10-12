@@ -426,7 +426,7 @@ def _ensure_parsed(source: str | Path | Document, *, page_limit: int) -> Documen
     - Document with images_b64 -> pass through (capped at page_limit)
     - Document without images_b64 -> parse_document(parser="pdf-pages")
     """
-    if isinstance(source, (str, Path)):
+    if isinstance(source, str | Path):
         p = Path(source)
         if not p.exists():
             raise FileNotFoundError(f"source path does not exist: {p}")

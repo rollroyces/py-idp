@@ -202,7 +202,7 @@ def _value_equal(a: Any, b: Any) -> bool:
     if type(a) is type(b):
         return a == b
     # Cross-type numeric (int vs float) tolerance
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) and not isinstance(b, bool):
+    if isinstance(a, int | float) and isinstance(b, int | float) and not isinstance(a, bool) and not isinstance(b, bool):
         return float(a) == float(b)
     return a == b
 

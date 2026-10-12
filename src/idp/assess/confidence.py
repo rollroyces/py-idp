@@ -55,7 +55,7 @@ def _heuristic_confidence(doc: Document) -> dict[str, float]:
     for k, v in extraction.items():
         if v is None or v == "" or v == [] or v == {}:
             out[k] = 0.1
-        elif isinstance(v, (int, float)):
+        elif isinstance(v, int | float):
             out[k] = max(0.0, min(1.0, base))
         elif isinstance(v, str):
             out[k] = max(0.0, min(1.0, base + 0.05))

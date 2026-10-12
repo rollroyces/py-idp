@@ -266,7 +266,7 @@ def page_queue() -> None:
             # view uncluttered).
             if val is None:
                 st.text("(empty)")
-            elif isinstance(val, (dict, list)):
+            elif isinstance(val, dict | list):
                 st.code(str(val), language="json")
             else:
                 st.text(str(val))
@@ -274,7 +274,7 @@ def page_queue() -> None:
             # Pre-populated human-edit widget. We re-use the existing
             # text_input / text_area path so the JSON coercion logic
             # in coerce_field_value still applies.
-            if isinstance(val, (dict, list)):
+            if isinstance(val, dict | list):
                 new_v = st.text_area(
                     f"{chosen.id}_{field_name}_raw",
                     value=str(val),

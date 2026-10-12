@@ -180,7 +180,7 @@ def _score_dict(obj: dict[str, Any]) -> dict[str, float]:
             out[k] = 0.7
         elif isinstance(v, dict):
             out[k] = 0.7
-        elif isinstance(v, (int, float, bool)):
+        elif isinstance(v, int | float | bool):
             out[k] = 0.8
         else:
             out[k] = 0.5

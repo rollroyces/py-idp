@@ -10,6 +10,13 @@
 # This Source Code Form is subject to the terms of the AGPL-3.0-or-later.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+from idp.pipeline.async_pipeline import AsyncPipeline
 from idp.pipeline.pipeline import Pipeline, PipelineResult, run_file, save_result
 
-__all__ = ["Pipeline", "PipelineResult", "run_file", "save_result"]
+__all__ = [
+    "AsyncPipeline",
+    "Pipeline",
+    "PipelineResult",
+    "run_file",
+    "save_result",
+]

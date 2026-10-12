@@ -158,7 +158,7 @@ def coerce_field_value(raw: str, original: Any) -> tuple[Any, str | None]:
         gets stored in the review; the warning is shown to the user
         in the Streamlit UI ("invalid JSON; saved as raw string").
     """
-    if isinstance(original, (dict, list)):
+    if isinstance(original, dict | list):
         try:
             return json.loads(raw), None
         except (ValueError, TypeError):

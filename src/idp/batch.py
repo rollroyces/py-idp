@@ -25,14 +25,17 @@ backward compatibility.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from idp.checkpoint import CheckpointEntry, CheckpointStore
 from idp.core.document import Document
+from idp.llm.backend import Backend
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
 log = logging.getLogger(__name__)
@@ -44,11 +47,33 @@ class BatchItemResult:
 
     Either ``result`` is set (success) or ``error`` is set (failure).
     Exactly one of them is non-None.
+
+    ``success`` and ``latency_s`` are convenience aliases of ``ok`` and
+    ``elapsed_seconds`` respectively, exposed for the async batch
+    helper. Existing sync callers that construct ``BatchItemResult``
+    without these fields get the default ``success=True`` /
+    ``latency_s=0.0``, which is reconciled in :meth:`__post_init__`.
     """
     path: str
     result: PipelineResult | None = None
     error: str | None = None
     elapsed_seconds: float = 0.0
+    # Async-batch convenience fields. ``success`` mirrors ``ok`` (i.e.
+    # ``error is None``) and ``latency_s`` mirrors ``elapsed_seconds``.
+    success: bool = True
+    latency_s: float = 0.0
+
+    def __post_init__(self) -> None:
+        # If the caller only set the sync fields, mirror them onto the
+        # async-batch fields so the two views never disagree.
+        if self.error is not None:
+            self.success = False
+        else:
+            self.success = True
+        # Keep latency_s consistent with elapsed_seconds unless the
+        # caller explicitly set latency_s to a non-zero value.
+        if self.latency_s == 0.0 and self.elapsed_seconds != 0.0:
+            self.latency_s = self.elapsed_seconds
 
     @property
     def ok(self) -> bool:
@@ -230,4 +255,72 @@ def process_batch(
         yield item
 
 
-__all__ = ["BatchItemResult", "process_batch"]
+async def process_batch_async(
+    paths: list[str | Path],
+    *,
+    backend: Backend,
+    schema: str | type,
+    concurrency: int = 4,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> list[BatchItemResult]:
+    """Async version of :func:`process_batch` with bounded concurrency.
+
+    Uses an :class:`asyncio.Semaphore` to cap concurrent pipeline
+    runs at ``concurrency`` (default 4). For each path, builds a
+    :class:`Document` (via :meth:`Document.from_path`) and calls
+    :meth:`AsyncPipeline.arun` on a single shared pipeline. Each
+    result is wrapped in a :class:`BatchItemResult` matching the
+    sync helper's contract.
+
+    Args:
+        paths:       list of file paths (str or Path).
+        backend:     any :class:`Backend` instance.
+        schema:      Pydantic class or registered name (e.g. "Invoice").
+        concurrency: max in-flight pipeline runs (default 4).
+        on_progress: optional callback ``fn(done, total)`` invoked
+                     after each item completes.
+
+    Returns:
+        list of :class:`BatchItemResult` in the same order as
+        ``paths``. Errors are captured in :attr:`BatchItemResult.error`
+        and the helper never raises.
+    """
+    from idp.pipeline.async_pipeline import AsyncPipeline
+
+    semaphore = asyncio.Semaphore(concurrency)
+    apipe = AsyncPipeline.from_backend(backend=backend, schema=schema)
+    results: list[BatchItemResult | None] = [None] * len(paths)
+
+    async def _one(i: int, p: str | Path) -> None:
+        async with semaphore:
+            try:
+                t0 = time.perf_counter()
+                res = await apipe.arun(p)
+                latency = time.perf_counter() - t0
+                results[i] = BatchItemResult(
+                    path=str(p),
+                    success=True,
+                    result=res,
+                    latency_s=latency,
+                    error=None,
+                )
+            except Exception as e:  # noqa: BLE001
+                results[i] = BatchItemResult(
+                    path=str(p),
+                    success=False,
+                    result=None,
+                    latency_s=0.0,
+                    error=str(e),
+                )
+            if on_progress is not None:
+                done = sum(1 for r in results if r is not None)
+                try:
+                    on_progress(done, len(paths))
+                except Exception:  # noqa: BLE001
+                    log.exception("on_progress callback raised (ignored)")
+
+    await asyncio.gather(*[_one(i, p) for i, p in enumerate(paths)])
+    return results  # type: ignore[return-value]
+
+
+__all__ = ["BatchItemResult", "process_batch", "process_batch_async"]
