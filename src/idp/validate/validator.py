@@ -84,7 +84,7 @@ def numeric_range_rule(field: str, min_v: float, max_v: float) -> BusinessRule:
         v = extraction.get(field)
         if v is None:
             return True, None
-        if not isinstance(v, (int, float)):
+        if not isinstance(v, int | float):
             return False, f"{field} is not numeric ({v!r})"
         if v < min_v or v > max_v:
             return False, f"{field}={v} out of range [{min_v}, {max_v}]"

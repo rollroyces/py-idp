@@ -46,9 +46,24 @@ class CompletionRequest:
 
 
 class Backend(abc.ABC):
-    """Pluggable LLM backend."""
+    """Pluggable LLM backend.
+
+    Backends implement :meth:`complete` (sync). For async use, backends
+    also expose :meth:`acomplete`, which by default delegates to
+    :meth:`complete` via :func:`asyncio.to_thread` so every existing
+    backend transparently supports ``await``. Backends with a native
+    async HTTP client (e.g. ``openai.AsyncOpenAI``,
+    ``anthropic.AsyncAnthropic``) can override :meth:`acomplete` for
+    better performance.
+    """
 
     name: str = "base"
+
+    def __repr__(self) -> str:
+        # Default repr. Subclasses with interesting state (model name,
+        # base_url, API-key presence) override this for debuggability.
+        cls = type(self).__name__
+        return f"<{cls} name={self.name!r}>"
 
     @abc.abstractmethod
     def complete(self, req: CompletionRequest) -> str: ...
@@ -64,6 +79,18 @@ class Backend(abc.ABC):
         req = CompletionRequest(messages=messages, json_mode=True, **kw)
         out = self.complete(req)
         return _safe_json(out)
+
+    async def acomplete(self, req: CompletionRequest) -> str:
+        """Async version of :meth:`complete`.
+
+        Default implementation runs the sync :meth:`complete` in a
+        worker thread via :func:`asyncio.to_thread` so every existing
+        backend automatically supports async. Backends with a native
+        async client (anthropic, openai) can override this for better
+        performance.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.complete, req)
 
     @property
     def is_multimodal(self) -> bool:
@@ -293,6 +320,8 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
     Recognized names:
         mock | mock-ideal | mock-random | mock-omits   (no API key needed)
         openai | ollama | vllm | compat | anthropic     (international)
+        intl:groq | intl:mistral | intl:together |      (international providers)
+        intl:cohere | intl:fireworks
         china:deepseek | china:qwen | china:zhipu |     (China providers)
         china:moonshot | china:yi | china:doubao |
         china:hunyuan | china:baichuan
@@ -388,11 +417,88 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
         from idp.llm.ollama import OllamaBackend as _OllamaBackend
 
         return _OllamaBackend(**kwargs)
+    # International OpenAI-compat presets (groq, mistral, together, cohere, fireworks)
+    if name.startswith("intl:"):
+        from idp.llm.international import get_international_backend
+
+        provider = name.split(":", 1)[1]
+        multimodal = kwargs.pop("multimodal", False)
+        return get_international_backend(
+            provider,
+            model=kwargs.pop("model", None),
+            multimodal=multimodal,
+            api_key=kwargs.pop("api_key", None),
+            timeout=kwargs.pop("timeout", 120.0),
+        )
     if name in ("openai", "compat", "vllm", "lm-studio"):
         return OpenAICompatBackend(**kwargs)
     if name == "anthropic":
         return AnthropicBackend(**kwargs)
     raise ValueError(f"Unknown backend: {name}")
+
+
+def list_backends() -> list[dict[str, str]]:
+    """Enumerate every backend name the registry knows about.
+
+    Returns a list of ``{"name": ..., "family": ..., "auth": ...}``
+    dicts. Useful for CLI help screens, config validation, and tests
+    that need to assert the registry covers a known set of providers.
+
+    ``family`` is one of ``"mock"``, ``"international"``,
+    ``"intl-preset"``, ``"china-preset"``, ``"gated"``, ``"self-hosted"``.
+    ``auth`` describes the credential requirement: ``"none"`` (works
+    offline), ``"env-or-kwarg"`` (env var or explicit key), or
+    ``"gated"`` (requires opt-in env var).
+
+    Gated / opt-in backends (``slowmock``, ``nanonets``) are only
+    included when their gate is open in the current process; they
+    are listed but flagged with ``auth="gated"`` so the caller can
+    decide whether to show them to the user.
+    """
+    out: list[dict[str, str]] = []
+    # Mock variants — never need a key
+    for v in ("mock", "mock-ideal", "mock-random", "mock-omits"):
+        out.append({"name": v, "family": "mock", "auth": "none"})
+    # International OpenAI-compat aliases
+    for v in ("openai", "compat", "vllm", "lm-studio"):
+        out.append({"name": v, "family": "international", "auth": "env-or-kwarg"})
+    out.append({"name": "anthropic", "family": "international", "auth": "env-or-kwarg"})
+    # Ollama (self-hosted) — no key
+    out.append({"name": "ollama", "family": "self-hosted", "auth": "none"})
+    # International presets (intl:*) — each needs its provider env var
+    try:
+        from idp.llm.international import INTERNATIONAL_PROVIDER_PRESETS
+
+        for p in INTERNATIONAL_PROVIDER_PRESETS:
+            out.append(
+                {
+                    "name": f"intl:{p}",
+                    "family": "intl-preset",
+                    "auth": "env-or-kwarg",
+                }
+            )
+    except ImportError:
+        pass
+    # China presets (china:*) — each needs its provider env var
+    try:
+        from idp.llm.china import CHINA_PROVIDER_PRESETS
+
+        for p in CHINA_PROVIDER_PRESETS:
+            out.append(
+                {
+                    "name": f"china:{p}",
+                    "family": "china-preset",
+                    "auth": "env-or-kwarg",
+                }
+            )
+    except ImportError:
+        pass
+    # Gated / opt-in backends — listed but flagged
+    if os.environ.get("IDP_ENABLE_SLOWMOCK") == "1":
+        out.append({"name": "slowmock", "family": "gated", "auth": "gated"})
+    if os.environ.get("IDP_ENABLE_NANONETS") == "1":
+        out.append({"name": "nanonets", "family": "gated", "auth": "gated"})
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +621,7 @@ def _stub(
         branches = schema.get("anyOf") or schema.get("oneOf")
         # Defensive: a malformed schema may have anyOf/oneOf as a
         # non-list (e.g. a dict or a scalar). Treat non-lists as absent.
-        if not isinstance(branches, (list, tuple)):
+        if not isinstance(branches, list | tuple):
             branches = []
         for branch in branches:
             if isinstance(branch, dict) and branch.get("type") != "null":
@@ -524,7 +630,7 @@ def _stub(
     if "allOf" in schema:
         merged: dict[str, Any] = {}
         branches = schema["allOf"]
-        if not isinstance(branches, (list, tuple)):
+        if not isinstance(branches, list | tuple):
             branches = []
         for branch in branches:
             if isinstance(branch, dict):
@@ -573,7 +679,7 @@ def _perturb_json(schema_str: str) -> str:
     for k, v in list(base.items()):
         if isinstance(v, str):
             base[k] = "MOCK_WRONG_" + k
-        elif isinstance(v, (int, float)):
+        elif isinstance(v, int | float):
             base[k] = -1.0
         elif isinstance(v, dict):
             # don't recursively poke at nested dicts

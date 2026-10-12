@@ -8,8 +8,9 @@
 
 > **General-purpose, AI-enabled Intelligent Document Processing for Python.**
 > Six-stage pipeline (parse → classify → extract → assess → validate → HITL).
-> 12+ LLM backends. Pydantic-schema-driven. Built-in eval harness.
+> 23 LLM backends. Pydantic-schema-driven. Built-in eval harness.
 > **Auto-chunking for oversized documents. Self-hosted OCR via Nanonets-OCR2-3B. AI-driven schema discovery.**
+> **Async pipeline + per-field eval reports (v0.5).**
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-AGPL)
 [![Commercial license available](https://img.shields.io/badge/license-commercial_available-orange.svg)](https://github.com/rollroyces/py-idp/blob/main/LICENSE-COMMERCIAL)
@@ -292,6 +293,46 @@ export OPENAI_API_KEY=...
 idp run invoice.pdf --schema Invoice --backend openai
 ```
 
+### International presets (v0.5, 5 OpenAI-compat providers)
+
+`intl:*` resolves through `INTERNATIONAL_PROVIDER_PRESETS` so you don't have to
+remember endpoints. All speak the OpenAI Chat-Completions protocol.
+
+| name | family | env var | vision model |
+|---|---|---|---|
+| `intl:groq` | Llama 3.x, Mixtral | `GROQ_API_KEY` | `llama-3.2-90b-vision-preview` |
+| `intl:mistral` | Mistral Large / Small | `MISTRAL_API_KEY` | `pixtral-12b-2409` |
+| `intl:together` | Meta-Llama, Qwen, Mixtral | `TOGETHER_API_KEY` | `meta-llama/llama-3.2-90b-vision-instruct` |
+| `intl:cohere` | Command R+ | `COHERE_API_KEY` | (text-only) |
+| `intl:fireworks` | Llama, Qwen, DeepSeek | `FIREWORKS_API_KEY` | `llama-3.2-90b-vision-instruct` |
+
+```bash
+export GROQ_API_KEY=...
+idp run invoice.pdf --schema Invoice --backend intl:groq
+# or with vision:
+idp run invoice.pdf --schema Invoice --backend intl:groq --multimodal
+```
+
+Call `idp.llm.list_backends()` programmatically to enumerate every registered
+provider (useful for CLI help screens, config validation, and tests):
+
+```python
+from idp.llm import list_backends
+for b in list_backends():
+    print(b["name"], b["family"], b["auth"])
+# mock                 mock       none
+# openai               international  env-or-kwarg
+# anthropic            international  env-or-kwarg
+# ollama               self-hosted    none
+# intl:groq            intl-preset    env-or-kwarg
+# intl:mistral         intl-preset    env-or-kwarg
+# intl:together        intl-preset    env-or-kwarg
+# intl:cohere          intl-preset    env-or-kwarg
+# intl:fireworks       intl-preset    env-or-kwarg
+# china:deepseek       china-preset   env-or-kwarg
+# ... (8 china presets)
+```
+
 ### China (8 providers — all speak the OpenAI Chat-Completions protocol)
 
 Run `idp providers` to print the full table. Highlights:
@@ -460,7 +501,36 @@ flowchart LR
 
 For programmatic use, `idp.process_batch` and `idp.BatchItemResult` are exported at the top level — `from idp import process_batch` works directly. (The legacy import `from idp.llm.nanonets_batch import process_batch` is kept as a 12-line re-export shim.)
 
-The pipeline is **serial** in v0.3.x — concurrency is a future add. For now, expect roughly the same throughput as a single `idp run` per doc.
+### Async pipeline (v0.5)
+
+For FastAPI endpoints, Jupyter with `ipykernel`, or any asyncio context,
+use `AsyncPipeline` and `process_batch_async`:
+
+```python
+import asyncio
+from idp.llm import get_backend
+from idp.pipeline.async_pipeline import AsyncPipeline
+from idp.batch import process_batch_async
+
+# Single doc
+apipe = AsyncPipeline.from_backend(backend=get_backend("ollama"), schema="Invoice")
+doc = await apipe.arun("invoice.pdf")
+many = await apipe.arun_many([doc1, doc2, doc3, doc4, doc5])
+
+# Many docs with bounded concurrency + progress callback
+results = await process_batch_async(
+    paths,
+    backend=get_backend("ollama"),
+    schema="Invoice",
+    concurrency=4,                          # cap parallel in-flight pipelines
+    on_progress=lambda done, total: print(f"{done}/{total}"),
+)
+```
+
+Every shipped backend supports `await` out of the box because
+`Backend.acomplete` defaults to `asyncio.to_thread(self.complete, req)`.
+Backends with a native async client (`openai.AsyncOpenAI`,
+`anthropic.AsyncAnthropic`) can override it later for lower latency.
 
 ---
 
@@ -694,6 +764,17 @@ Three sample templates ship in `templates/`:
 [`invoice.md`](templates/invoice.md),
 [`contract.md`](templates/contract.md),
 [`bank_statement.md`](templates/bank_statement.md).
+
+v0.5 adds three more out of the box:
+[`w2.md`](templates/w2.md) (US wage & tax statement),
+[`id_card.md`](templates/id_card.md) (driver's license / passport),
+[`medical_claim.md`](templates/medical_claim.md) (CMS-1500 / UB-04 style).
+
+The corresponding Pydantic schemas — `W2`, `IDCard`, `MedicalClaim`
+— are registered in `SCHEMA_REGISTRY` so you can use them as
+`Pipeline(schema="W2")` or `extract_one("w2.pdf", schema="W2")`
+without writing any model code.
+
 See [`src/idp/templates.py`](src/idp/templates.py) and
 [`tests/test_template_to_llm.py`](tests/test_template_to_llm.py) for
 the full API.
@@ -843,6 +924,38 @@ python examples/benchmark_cord.py
 ```
 
 This runs the in-tree MockBackend against all 5 receipts and prints per-field precision / recall / F1 plus latency. **No API key needed** — the numbers are reproducible by anyone with `pip install py-idp[eval]`. To benchmark a real backend, swap `"mock"` for `"ollama"` / `"openai"` / `"anthropic"` / `"china:qwen"` in `examples/benchmark_cord.py`.
+
+### Per-field report + CI regression gate (v0.5)
+
+`run_dataset()` returns both a per-strategy view and a cross-strategy
+`per_field_accuracy` dict so you can see *which* fields are weak, not
+just the headline F1:
+
+```python
+from idp.eval import run_dataset, check_regression, format_report, EvalRegressionError
+
+results = run_dataset("src/idp/eval/datasets/invoices", strategies=["mock", "ollama"])
+print(format_report(results))
+# Eval Report (3 cases, 2 strategies)
+# ====================================
+# Strategy 'mock':
+#   schema_valid_rate: 0.67
+#   field_match_rate:  0.55
+#   ...
+# Per-field accuracy:
+#   invoice_number: 8/10 = 0.80
+#   vendor_name:    7/10 = 0.70
+#   total_amount:   9/10 = 0.90
+
+# CI gate: fail the build if any metric falls below its threshold
+failures = check_regression(results, {
+    "per_strategy.ollama.field_match_rate":     0.85,
+    "per_strategy.ollama.schema_valid_rate":   0.95,
+    "per_field_accuracy.total_amount.accuracy": 0.90,
+})
+if failures:
+    raise EvalRegressionError("\n".join(failures))
+```
 
 ---
 

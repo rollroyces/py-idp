@@ -5,6 +5,106 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.5.0] — Unreleased — multi-track enhancements
+
+Four independent feature tracks landed in one PR, each with its own
+tests and a backward-compatible contract. Headline: **"more backends,
+more doc types, async, eval CI gate."**
+
+### Added
+
+* **5 international LLM provider backends** — `src/idp/llm/international.py`.
+  `Groq`, `Mistral`, `Together AI`, `Cohere`, and `Fireworks` join the
+  existing `OpenAI` / `Anthropic` / `Ollama` line-up. Each is registered
+  via a `INTERNATIONAL_PROVIDER_PRESETS` dict (mirroring the
+  `CHINA_PROVIDER_PRESETS` pattern) and resolved through
+  `get_backend("intl:groq" | "intl:mistral" | "intl:together" |
+  "intl:cohere" | "intl:fireworks")`. All speak the OpenAI
+  Chat-Completions protocol, so they share `OpenAICompatBackend` under
+  the hood. Multimodal variants are picked automatically when you
+  pass `multimodal=True`. Total registered backends: **23** (was 18).
+  Tested via `tests/test_international_providers.py` (6 tests).
+
+* **`list_backends()` registry helper** — `src/idp/llm/backend.py`.
+  Returns a list of `{"name", "family", "auth"}` dicts covering every
+  registered backend. Gated backends (`slowmock`, `nanonets`) are
+  surfaced only when their `IDP_ENABLE_*` env var is set. Useful for
+  CLI help screens, config validation, and tests that assert the
+  registry's coverage. Re-exported from `idp.llm`.
+  Tested via `tests/test_backend_registry_helpers.py` (10 tests).
+
+* **`Backend.__repr__`** — `src/idp/llm/backend.py`. Every backend now
+  prints as `<ClassName name='...'>`, making logs and debugger
+  sessions far less opaque. Subclasses can override for richer
+  state (model, base_url, key presence).
+
+* **3 new built-in document types** — `src/idp/core/schemas.py`:
+  - `W2` (US IRS wage and tax statement) with `W2LineItem`
+  - `IDCard` (driver's license / passport / state ID)
+  - `MedicalClaim` (CMS-1500 / UB-04) with `MedicalClaimLineItem`
+
+  All three ship with corresponding Markdown templates in
+  `templates/w2.md`, `templates/id_card.md`, `templates/medical_claim.md`
+  (frontmatter + field descriptions + "Common mistakes" section, same
+  shape as the existing `invoice.md` / `contract.md` / `bank_statement.md`).
+  Registered in `SCHEMA_REGISTRY` so `Pipeline(schema="W2")`,
+  `extract_one("w2.pdf", schema="W2")`, and template auto-discovery
+  all work out of the box.
+  Tested via `tests/test_new_schemas.py` (11 tests).
+
+* **Async pipeline layer** — `src/idp/pipeline/async_pipeline.py`.
+  New `AsyncPipeline` class wraps the existing `Pipeline` so you can
+  `await apipe.arun(doc)` and `await apipe.arun_many(docs)`. All
+  existing backends transparently support async via a new
+  `Backend.acomplete()` method that defaults to
+  `asyncio.to_thread(self.complete, req)` — so zero risk to
+  existing code, and backends with a native async client
+  (`openai.AsyncOpenAI`, `anthropic.AsyncAnthropic`) can override
+  later for better performance.
+
+* **Async batch helper** — `src/idp/batch.py::process_batch_async`.
+  Same surface as the existing sync `process_batch` but with a
+  bounded `concurrency=` semaphore (default 4), an optional
+  `on_progress(done, total)` callback, and structured error capture
+  in `BatchItemResult.success` / `.latency_s` fields.
+  Tested via `tests/test_async_pipeline.py` (14 tests).
+
+* **Per-field accuracy report in eval harness** — `src/idp/eval/runner.py`.
+  `run_dataset()` now additionally returns `per_field_accuracy`:
+  a dict of `{field_name: {"match": int, "total": int, "accuracy": float}}`
+  aggregated across all cases × all strategies. Backward-compatible —
+  existing `rows` / `detail` / `dataset` / `strategies` keys are
+  preserved. Tested via `tests/test_eval_regression.py` (12 tests).
+
+* **Regression-threshold gate for CI** — `src/idp/eval/runner.py`.
+  New `check_regression(results, thresholds)` returns a list of
+  failing threshold descriptions, plus a `verify_against_thresholds`
+  convenience wrapper that raises `EvalRegressionError`. Threshold
+  grammar: `per_strategy.<name>.<metric>` and
+  `per_field_accuracy.<field>.<metric>`. Use this in CI: empty
+  list = green, non-empty = fail the build.
+
+* **`format_report(results)`** — `src/idp/eval/runner.py`.
+  Plain-text pretty-printer for eval results, suitable for
+  `print()` in CLI output or test assertions. No external table
+  library.
+
+### Changed
+
+* `BatchItemResult` gained two new optional fields: `success: bool`
+  and `latency_s: float`, kept consistent with the existing `ok` /
+  `elapsed_seconds` via a `__post_init__` reconciler. Sync callers
+  that construct `BatchItemResult(path=..., result=..., ...)` still
+  work — the new fields default and reconcile transparently.
+
+### Test coverage
+
+* **+53 new tests** (6 + 10 + 11 + 12 + 14) across 5 new test files.
+* **All 984 existing tests still pass** (2 skipped — pre-existing
+  `test_enhance_benchmark.py` requires the `pytest-benchmark` plugin
+  which is not in the dev environment).
+* `python -c "import idp"` still works.
+
 ## [0.4.0] — 2026-09-21 — v0.4 plan complete
 
 The v0.4 plan recorded in `docs/ROADMAP_v0.4.md` ships in this release.

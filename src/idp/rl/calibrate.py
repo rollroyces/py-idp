@@ -122,7 +122,7 @@ def synthetic_reviews_from_gold(
             if k in corrupt_keys:
                 # perturb the value: empty string for strings, 0.0 for numbers
                 v = gold[k]
-                if isinstance(v, (int, float)):
+                if isinstance(v, int | float):
                     model[k] = 0.0
                 elif isinstance(v, str):
                     model[k] = ""

@@ -128,11 +128,76 @@ class Receipt(BaseModel):
     credit_card_last4: str | None = None
 
 
+class W2LineItem(BaseModel):
+    description: str
+    amount: float
+
+
+class W2(BaseModel):
+    """W-2 wage and tax statement (US IRS)."""
+    employee_name: str
+    employee_ssn_last4: str | None = None
+    employer_name: str
+    employer_ein: str | None = None
+    tax_year: int | None = None
+    wages_tips_compensation: float | None = None
+    federal_income_tax_withheld: float | None = None
+    social_security_wages: float | None = None
+    social_security_tax_withheld: float | None = None
+    medicare_wages: float | None = None
+    medicare_tax_withheld: float | None = None
+
+
+class IDCard(BaseModel):
+    """Generic ID card or driver's license extraction."""
+    document_type: str  # e.g. "Driver's License", "Passport", "State ID"
+    full_name: str
+    date_of_birth: str | None = None
+    sex: str | None = None
+    id_number: str | None = None  # license #, passport #, etc.
+    issuing_authority: str | None = None  # e.g. "California DMV", "US State Department"
+    issue_date: str | None = None
+    expiration_date: str | None = None
+    address: str | None = None
+    nationality: str | None = None
+
+
+class MedicalClaimLineItem(BaseModel):
+    service_code: str | None = None  # CPT/HCPCS code
+    description: str
+    service_date: str | None = None
+    charged_amount: float
+    allowed_amount: float | None = None
+    paid_amount: float | None = None
+    patient_responsibility: float | None = None
+
+
+class MedicalClaim(BaseModel):
+    """Medical insurance claim (CMS-1500 / UB-04 style)."""
+    claim_number: str | None = None
+    patient_name: str
+    patient_dob: str | None = None
+    patient_member_id: str | None = None
+    insurer_name: str | None = None
+    provider_name: str
+    provider_npi: str | None = None
+    date_of_service: str | None = None
+    diagnosis_codes: list[str] = Field(default_factory=list)  # ICD-10
+    line_items: list[MedicalClaimLineItem] = Field(default_factory=list)
+    total_charged: float | None = None
+    total_allowed: float | None = None
+    total_paid: float | None = None
+    total_patient_responsibility: float | None = None
+
+
 SCHEMA_REGISTRY: dict[str, type[BaseModel]] = {
     "Invoice": Invoice,
     "Contract": Contract,
     "BankStatement": BankStatement,
     "Receipt": Receipt,
+    "W2": W2,
+    "IDCard": IDCard,
+    "MedicalClaim": MedicalClaim,
 }
 
 
