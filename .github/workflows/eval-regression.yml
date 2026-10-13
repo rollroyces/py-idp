@@ -1,0 +1,103 @@
+name: eval-regression
+
+# v0.5 follow-on. Wires PR #45's eval harness (run_dataset / check_regression /
+# EvalRegressionError / format_report) into CI as a regression gate.
+#
+# Triggers:
+#   - push to main / develop
+#   - pull_request targeting main / develop
+#   - workflow_dispatch for manual runs from the Actions UI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# Least-privilege default. The job does not need to write back to the repo.
+permissions:
+  contents: read
+
+jobs:
+  eval-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[eval,api]
+
+      # Headline step. Runs the eval harness against the in-tree invoices
+      # dataset using the deterministic mock backend (no network, no API keys)
+      # and gates the build via check_regression() + EvalRegressionError.
+      - name: Run eval regression gate
+        run: |
+          python3 - << 'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+          from idp.eval import (
+              EvalRegressionError,
+              check_regression,
+              format_report,
+              run_dataset,
+          )
+
+          results = run_dataset(
+              "src/idp/eval/datasets/invoices",
+              strategies=["mock"],
+          )
+
+          # Thresholds are deliberately permissive for v0.5 (all 0.0) so the
+          # gate is a "no-op gate" against the in-tree mock fixture:
+          #
+          #   * The mock backend (src/idp/llm/backend.py::MockBackend) returns
+          #     an empty JSON shell for the "extract" prompt — so
+          #     schema_valid_rate and field_match_rate are 0.0 by design.
+          #   * per_field_accuracy therefore collapses to 0/3 == 0.0.
+          #
+          # v0.6 will tighten these as real backends (OpenAI, Anthropic, Ollama,
+          # NanonetsVL) are evaluated and we have a baseline to enforce against.
+          # When tightening: copy the current run's metrics into the threshold
+          # dict with a small margin (e.g. observed - 0.05) so the gate fails
+          # only on real regressions, not on first-run noise.
+          thresholds = {
+              "per_strategy.mock.schema_valid_rate": 0.0,
+              "per_strategy.mock.field_match_rate": 0.0,
+              "per_field_accuracy.invoice_number.accuracy": 0.0,
+          }
+          failures = check_regression(results, thresholds)
+
+          # Pretty-print the report so the run log carries a human-readable
+          # summary regardless of pass/fail outcome.
+          print(format_report(results))
+
+          # Persist the raw metrics so the upload-artifact step can save them.
+          out_path = Path("eval-results.json")
+          out_path.write_text(json.dumps(results, indent=2, default=str))
+          print(f"\n[saved] {out_path.resolve()}")
+
+          if failures:
+              # Join with newlines so the GitHub Actions log renders one
+              # failing threshold per line under the step's error summary.
+              raise EvalRegressionError("eval-regression gate failed:\n" + "\n".join(failures))
+          PY
+
+      # Save the raw eval-results.json so reviewers can inspect metrics and
+      # reproduce / extend the analysis locally without re-running the pipeline.
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-regression-results
+          path: eval-results.json
+          if-no-files-found: warn
+          retention-days: 14
