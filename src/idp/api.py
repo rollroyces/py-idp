@@ -25,6 +25,7 @@ multi-tenant auth (these are deployment-level concerns).
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -167,6 +168,18 @@ async def lifespan(app: FastAPI):
     _log.info("py-idp API starting: host=%s port=%d storage=%s backend=%s",
               _settings.api_host, _settings.api_port, _settings.storage_backend, _settings.default_backend)
 
+    # NOTE: CORS middleware cannot be added inside lifespan() — Starlette
+    # forbids ``add_middleware`` after the app has started. We install it
+    # at module-import time below (see ``_install_cors_initial()``), so
+    # Settings.cors_origins env var must be set before uvicorn imports
+    # ``idp.api:app``. The legacy deferred-install function is kept for
+    # test compatibility but is now a no-op (logs a warning if called).
+    if os.environ.get("IDP_CORS_ORIGINS"):
+        _log.info(
+            "CORS configured for: %s — middleware installed at import time",
+            _settings.cors_origins,
+        )
+
     _rate_limiter = RateLimiter(
         per_key_per_minute=_settings.rate_limit_per_minute,
         global_per_minute=0,  # disabled by default; set via env if needed
@@ -247,9 +260,42 @@ async def logging_middleware(request: Request, call_next):
         metrics.observe("http_request_duration_seconds", elapsed, path=request.url.path)
 
 
-# CORS (configured in lifespan but installed here so the order is correct)
+# CORS (installed at module-import time)
+#
+# Important: Starlette forbids ``app.add_middleware(...)`` after the app
+# has started, so we cannot install CORS from inside the lifespan handler.
+# Instead, we read IDP_CORS_ORIGINS once at import time and install
+# CORSMiddleware BEFORE the ``app = FastAPI(...)`` line below. The
+# setting is fixed at import — change requires re-import (which uvicorn
+# does on every reload). The legacy ``_install_cors()`` function is kept
+# as a documented no-op for back-compat (any old code calling it gets a
+# warning explaining the new constraint).
+_CORS_INSTALLED = False
+
+
 def _install_cors() -> None:
-    s = _require_settings()
+    """DEPRECATED no-op for back-compat.
+
+    CORS must now be installed at module-import time via
+    ``_install_cors_initial()`` (called automatically below the ``app =
+    FastAPI(...)`` line is impossible, so we install above it instead).
+    Calling this function at runtime raises ``RuntimeError`` because
+    Starlette forbids ``add_middleware`` after app start.
+    """
+    raise RuntimeError(
+        "_install_cors() is a no-op in this version of py-idp. "
+        "CORS middleware is installed at module-import time. "
+        "Set IDP_CORS_ORIGINS in the environment BEFORE starting "
+        "uvicorn, or rebuild the process after changing it."
+    )
+
+
+def _install_cors_initial() -> None:
+    """Install CORSMiddleware on the app. Called exactly once at import."""
+    global _CORS_INSTALLED
+    if _CORS_INSTALLED:
+        return
+    s = _require_settings_or_default()
     if s.cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -258,6 +304,16 @@ def _install_cors() -> None:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        _log.info("CORS middleware installed for origins=%s", list(s.cors_origins))
+    _CORS_INSTALLED = True
+
+
+def _require_settings_or_default():
+    """Return Settings.load() if the env has IDP_CORS_ORIGINS, else
+    fall back to a Settings() instance with default cors_origins."""
+    if os.environ.get("IDP_CORS_ORIGINS"):
+        return Settings.load()
+    return Settings()
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +418,9 @@ async def extract_sync(
     s = _require_settings()
     raw = await _read_capped(file, s.max_upload_bytes)
     upload_dir = _require_upload_dir()
-    dst = upload_dir / (file.filename or "upload")
+    # Filename is attacker-controlled. Sanitize, pin to upload_dir, and
+    # reject any extension we don't accept BEFORE writing to disk.
+    dst = _safe_upload_path(upload_dir, file.filename or "")
     dst.write_bytes(raw)
 
     # Template routing: pick a template by filename + MIME if the
@@ -386,7 +444,11 @@ async def extract_sync(
         schema=schema_name or "Invoice",
     )
     doc = Document.from_path(str(dst))
-    res = pipeline.run(doc)
+    # arun() dispatches the blocking LLM call (5-15s on Nanonets, 1-30s
+    # on hosted backends) to a worker thread so the event loop stays
+    # responsive. Without this, /extract freezes /healthz, /readyz, and
+    # any other concurrent requests. (#P0 audit fix.)
+    res = await pipeline.arun(doc)
     metrics.inc("extractions", 1, backend=res.backend_name, schema=res.schema_name or "_none")
     return ExtractResponse(
         schema_name=res.schema_name,
@@ -419,6 +481,70 @@ def _require_template_registry() -> TemplateRegistry:
     if _template_registry is None:
         raise HTTPException(status_code=503, detail="server not ready: templates not loaded")
     return _template_registry
+
+
+# Filenames can carry path-traversal payloads (e.g. "../etc/passwd").
+# Anything that isn't [A-Za-z0-9._-] is replaced with an underscore so the
+# resolved path can never escape the upload directory. We also pin the
+# whitelist of accepted extensions BEFORE writing anything to disk —
+# an attacker uploading ".exe" or "../" gets a 415/400, not a silent write.
+# On Linux/POSIX backslash is a legal filename char; on Windows it is a
+# path separator. Stripping it is defence-in-depth for cross-platform safety.
+_SAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+_ALLOWED_UPLOAD_EXTENSIONS: frozenset[str] = frozenset({
+    ".pdf", ".txt", ".md", ".markdown", ".html", ".htm", ".eml",
+    ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp",
+})
+
+
+def _sanitize_upload_filename(raw: str | None) -> str:
+    """Return a filename safe to join with the upload dir.
+
+    Rules (in order):
+      1. ``None`` / empty / pure-whitespace -> ``"upload"``.
+      2. Strip directory components. On POSIX ``Path(name).name``
+         strips up to the last ``/``; on Windows it would also strip
+         up to the last ``\\\\``. We do an extra ``replace("\\\\", ...)``
+         before to ensure cross-platform safety even when the running
+         Python reports the wrong platform.
+      3. Replace any character outside [A-Za-z0-9._-] with ``_``.
+      4. Reject empty results or names that start with ``.`` (dotfiles).
+      5. Cap at 255 chars (POSIX filename limit).
+    """
+    name = (raw or "").strip()
+    if not name:
+        return "upload"
+    # Cross-platform: strip both separator styles. ``Path(name).name``
+    # only strips the platform-native one.
+    name = name.replace("\\", "/")
+    name = Path(name).name  # strip directory components
+    name = _SAFE_NAME_CHARS.sub("_", name)
+    if not name or name.startswith("."):
+        name = "upload_" + name
+    return name[:255]
+
+
+def _safe_upload_path(upload_dir: Path, filename: str) -> Path:
+    """Return a ``Path`` guaranteed to live inside ``upload_dir``.
+
+    Raises ``HTTPException(400)`` if the resolved path escapes the
+    directory (defence in depth — sanitization should already prevent
+    this, but a symlinked ``upload_dir`` would bypass it).
+    Raises ``HTTPException(415)`` for unsupported extensions.
+    """
+    safe = _sanitize_upload_filename(filename)
+    candidate = (upload_dir / safe).resolve()
+    upload_root = upload_dir.resolve()
+    if not candidate.is_relative_to(upload_root):
+        raise HTTPException(status_code=400, detail="invalid filename")
+    ext = candidate.suffix.lower()
+    if ext not in _ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported file type: {ext!r}; allowed: "
+                   f"{sorted(_ALLOWED_UPLOAD_EXTENSIONS)}",
+        )
+    return candidate
 
 
 def _request_id(request: Request) -> str:
@@ -507,7 +633,15 @@ async def validation_error_handler(
     return JSONResponse(status_code=422, content=env)
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------
 # Module version (also used by /version endpoint)
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------
 __all__ = ["app", "lifespan"]
+
+# Install CORS now that all helper functions are defined and ``app`` is
+# fully constructed. Must run AFTER ``app = FastAPI(...)`` (line ~218)
+# and AFTER all helper functions. Starlette forbids ``add_middleware``
+# after the app has started (i.e. inside lifespan), so this is the
+# ONLY correct install point. IDP_CORS_ORIGINS must be set in the env
+# before uvicorn imports ``idp.api:app``.
+_install_cors_initial()

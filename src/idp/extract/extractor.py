@@ -206,10 +206,20 @@ def _safe_load(raw: str) -> dict[str, Any]:
       - only used by the extract stage, where `dict[str, Any]` is the
         schema target, and we WANT to fail loudly when the model emits
         non-JSON or text before/after JSON.
-      - Returns `{"_error": ..., "_raw": ...}` on any parse failure so
-        the caller's `schema.model_validate` raises — which then surfaces
-        in `doc.errors` instead of being silently treated as a valid
-        empty extraction.
+      - Returns an error envelope (``{"_error": ..., "_raw": ...}``) on
+        ANY parse failure OR when the model returned valid JSON that
+        isn't an object (e.g. the bare string ``"42"``, the array
+        ``[]``, the boolean ``true``). The downstream
+        ``schema.model_validate`` raises on the error envelope, which
+        surfaces in ``doc.errors`` instead of being silently treated
+        as a valid empty extraction.
+
+    Defensive against the silent data-loss bug fixed in v0.3.9: a
+    non-dict JSON value used to be wrapped as ``{"_value": v}``,
+    which Pydantic accepted as "valid but all-required-fields-missing"
+    and the pipeline returned an empty extraction without any error.
+    Now it raises loudly so the caller (HITL review, retry logic,
+    monitoring) sees the problem.
     """
     s = (raw or "").strip()
     if not s:
@@ -218,7 +228,6 @@ def _safe_load(raw: str) -> dict[str, Any]:
     s = re.sub(r"\s*```$", "", s)
     try:
         v = json.loads(s)
-        return v if isinstance(v, dict) else {"_value": v}
     except Exception:  # noqa: BLE001
         # Only try the brace-fallback when the model wrapped the JSON in
         # markdown. Otherwise we'd silently eat garbage and Pydantic would
@@ -227,10 +236,24 @@ def _safe_load(raw: str) -> dict[str, Any]:
         if m:
             try:
                 v = json.loads(m.group(1))
-                return v if isinstance(v, dict) else {"_value": v}
             except Exception:  # noqa: BLE001
-                pass
-        return {"_error": "could not parse JSON", "_raw": raw}
+                return {"_error": "could not parse JSON", "_raw": raw}
+        else:
+            return {"_error": "could not parse JSON", "_raw": raw}
+    # CRITICAL: reject non-dict JSON values. A bare "42", an array, or
+    # a boolean IS valid JSON, but it is NOT a valid extraction dict.
+    # Previously we wrapped it as {"_value": v} which silently passed
+    # Pydantic validation as "valid extraction, all required fields
+    # missing" — a data-loss bug. Now we return the same error envelope
+    # shape as a parse failure so the caller's
+    # `schema.model_validate` raises and the error surfaces.
+    if not isinstance(v, dict):
+        return {
+            "_error": f"expected JSON object, got {type(v).__name__}",
+            "_raw": raw,
+            "_value_type": type(v).__name__,
+        }
+    return v
 
 
 # ---------------------------------------------------------------------------

@@ -56,6 +56,17 @@ ENV PYTHONUNBUFFERED=1 \
     IDP_STORAGE_BACKEND=memory \
     IDP_RATE_LIMIT_PER_MINUTE=60
 
+# CRITICAL: lock X-Forwarded-For trust to a specific CIDR. The previous
+# default of "*" trusted the header from anyone, which lets an attacker
+# who can reach the uvicorn port directly (bypassing the reverse proxy)
+# spoof their IP to bypass per-IP rate limits and taint audit logs.
+# Override at deploy time with:
+#   docker build --build-arg FORWARDED_ALLOW_IPS=10.0.0.0/8 .
+# Production default is the loopback only (the reverse proxy on the same
+# host). For k8s, set to the in-cluster pod CIDR.
+ARG FORWARDED_ALLOW_IPS=127.0.0.1/32
+ENV IDP_FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS}
+
 USER idp
 EXPOSE 8080
 
@@ -67,10 +78,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Run uvicorn directly. Single worker is correct for development; for prod
 # use --workers $(( 2 * $(nproc) )) or rely on the orchestrator (k8s) to
-# scale replicas.
-CMD ["uvicorn", "idp.api:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8080", \
-     "--proxy-headers", \
-     "--forwarded-allow-ips", "*", \
-     "--log-level", "info"]
+# scale replicas. Forwarded-allow-ips is interpolated from the build-arg
+# so it cannot be accidentally widened at runtime.
+ARG FORWARDED_ALLOW_IPS
+CMD ["sh", "-c", "exec uvicorn idp.api:app \
+     --host 0.0.0.0 \
+     --port 8080 \
+     --proxy-headers \
+     --forwarded-allow-ips \"${IDP_FORWARDED_ALLOW_IPS}\" \
+     --log-level info"]

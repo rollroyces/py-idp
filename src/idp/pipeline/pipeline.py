@@ -262,6 +262,26 @@ class Pipeline:
             template_version=template_version,
         )
 
+    async def arun(self, doc: Document) -> PipelineResult:
+        """Async variant of ``run()`` — runs the blocking pipeline in a
+        worker thread so the FastAPI event loop stays responsive.
+
+        Without this, ``Pipeline.run()`` (which calls sync LLM clients and
+        on Nanonets runs torch inference) blocks the event loop for
+        5–15 s per request, freezing the entire server. ``arun`` uses
+        ``asyncio.to_thread`` to dispatch the blocking work to the default
+        thread pool, freeing the event loop to handle health checks,
+        other concurrent requests, etc.
+
+        Performance note: this trades parallelism-on-the-loop for one
+        blocking operation per request. For sustained throughput you still
+        want a separate worker process; ``arun`` is the minimum-viable
+        fix to keep the HTTP tier responsive when Nanonets (or any
+        synchronous backend) is the chosen LLM.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.run, doc)
+
     def set_template_registry(self, registry: Any) -> None:
         """Attach a TemplateRegistry for resolving string template names.
 
