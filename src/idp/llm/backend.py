@@ -325,6 +325,8 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
         china:deepseek | china:qwen | china:zhipu |     (China providers)
         china:moonshot | china:yi | china:doubao |
         china:hunyuan | china:baichuan
+        nanonets                                            (gated, self-hosted OCR)
+        unlimited-ocr                                       (gated, self-hosted OCR, v0.6)
         slowmock                                            (load-test only)
 
     For China providers you can pass `multimodal=True` to switch to the
@@ -393,6 +395,19 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
             )
         from idp.llm.nanonets import NanonetsVLBackend as _NanonetsVLBackend
         return _NanonetsVLBackend(**kwargs)
+    if name == "unlimited-ocr":
+        # Gated like nanonets. Same gate pattern (env var), same deps
+        # (the [hf-vlm] extra covers both). Reuses the [hf-vlm] install
+        # so no new pip dependencies.
+        if os.environ.get("IDP_ENABLE_UNLIMITED_OCR") != "1":
+            raise ValueError(
+                "unlimited-ocr backend is gated. To enable:\n"
+                "  pip install py-idp[hf-vlm]   # installs torch + transformers\n"
+                "  export IDP_ENABLE_UNLIMITED_OCR=1\n"
+                "  IDP_BACKEND=unlimited-ocr  # or: backend = UnlimitedOcrBackend()"
+            )
+        from idp.llm.unlimited_ocr import UnlimitedOcrBackend as _UnlimitedOcrBackend
+        return _UnlimitedOcrBackend(**kwargs)
     # China providers: prefix with china:
     if name.startswith("china:"):
         from idp.llm.china import get_china_backend
@@ -498,6 +513,8 @@ def list_backends() -> list[dict[str, str]]:
         out.append({"name": "slowmock", "family": "gated", "auth": "gated"})
     if os.environ.get("IDP_ENABLE_NANONETS") == "1":
         out.append({"name": "nanonets", "family": "gated", "auth": "gated"})
+    if os.environ.get("IDP_ENABLE_UNLIMITED_OCR") == "1":
+        out.append({"name": "unlimited-ocr", "family": "gated", "auth": "gated"})
     return out
 
 

@@ -99,6 +99,20 @@ def test_list_backends_gated_when_on():
         os.environ.pop("IDP_ENABLE_SLOWMOCK", None)
 
 
+def test_list_backends_includes_unlimited_ocr_when_gated_on():
+    """v0.6: IDP_ENABLE_UNLIMITED_OCR=1 exposes unlimited-ocr in list_backends()."""
+    import os
+
+    os.environ["IDP_ENABLE_UNLIMITED_OCR"] = "1"
+    try:
+        names = {r["name"] for r in list_backends()}
+        assert "unlimited-ocr" in names
+        by_name = {r["name"]: r for r in list_backends()}
+        assert by_name["unlimited-ocr"]["auth"] == "gated"
+    finally:
+        os.environ.pop("IDP_ENABLE_UNLIMITED_OCR", None)
+
+
 def test_list_backends_family_groups():
     """Each family should have at least one entry, except the gated one when off."""
     rows = list_backends()
