@@ -5,6 +5,55 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.6.0] — Unreleased — Unlimited-OCR backend
+
+Adds `baidu/Unlimited-OCR` (Baidu, arXiv 2606.23050) as a parallel
+self-hosted OCR backend. Differentiation over Nanonets-OCR2-3B: 32K
+context, constant KV cache via Reference Sliding Window Attention (R-SWA),
+and a native `infer_multi()` API for dozens-of-pages-in-one-forward-pass.
+MIT-licensed. Expected 5-10× wall-time improvement on ≥10-page documents,
+plus cross-page reasoning (e.g. "see appendix A" actually reads the
+appendix).
+
+### Added
+
+* **`UnlimitedOcrBackend`** — `src/idp/llm/unlimited_ocr.py`. Mirrors
+  `NanonetsVLBackend` shape: gated behind `IDP_ENABLE_UNLIMITED_OCR=1`,
+  lazy load, multimodal, platform-aware. Uses the model's native
+  `model.infer()` (single image, gundam mode) and `model.infer_multi()`
+  (multi-page, base mode) entry points. When `Message.images_b64` carries
+  more than one image, `_infer_multi` is called; otherwise `_infer_single`.
+  `<|det|>region_type [bbox]<|/det|>` markup is stripped from the output
+  so the downstream JSON extraction pipeline sees clean text.
+* **Wired into `get_backend("unlimited-ocr")` and `list_backends()`** —
+  same gated-registration pattern as `nanonets`. Reuses the existing
+  `[hf-vlm]` extra (no new pip dependencies).
+* **`tests/test_unlimited_ocr_backend.py`** — 23 tests covering gating,
+  lazy load, image extraction, infer vs infer_multi routing, marker
+  stripping, device resolution, 4-bit quantization, and the helpful
+  ImportError when torch/transformers are missing.
+* **Tests for `list_backends()` gating** — `tests/test_backend_registry_helpers.py`
+  gains `test_list_backends_includes_unlimited_ocr_when_gated_on`.
+
+### Reuses
+
+* `[hf-vlm]` extra (no new pip dependencies; the Unlimited-OCR `trust_remote_code`
+  model and Nanonets share identical deps: `torch`, `transformers`,
+  `accelerate`, `safetensors`, `Pillow`, `huggingface-hub`)
+* Existing `idp.llm.Backend` ABC and `is_multimodal` contract
+* `Message.images_b64: list[str]` field for image attach
+* `_safe_json` downstream parser (works on the marker-stripped text)
+
+### Security
+
+Unlimited-OCR ships **custom code** (DeepSeek-OCR-2 base + R-SWA decoder)
+loaded with `trust_remote_code=True`. This is standard practice for
+cutting-edge open-weights models but does mean the `modeling_*.py`
+files from the repo are executed in your Python process. Review the
+upstream code if this is a concern; users who prefer not to run the
+custom code can deploy via the SGLang-server path and use a plain
+OpenAI-compat client instead (separate backend, out of scope for v0.6).
+
 ## [0.5.0] — Unreleased — multi-track enhancements
 
 Four independent feature tracks landed in one PR, each with its own

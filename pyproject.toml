@@ -56,7 +56,7 @@ ocr = ["pytesseract>=0.3.10", "Pillow>=10.0"]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.27"]
 ollama = ["ollama>=0.2"]
-# Hugging Face vision-language model (Nanonets-OCR2-3B for self-hosted OCR).
+# Hugging Face vision-language models (Nanonets-OCR2-3B + Baidu Unlimited-OCR).
 # Heavy: ~3 GB pip install (torch + transformers), ~7 GB model weights.
 # Runs offline on MPS (Apple Silicon) or CUDA. No API key needed.
 hf-vlm = [

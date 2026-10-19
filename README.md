@@ -415,6 +415,54 @@ result = Pipeline(backend=backend, schema=Invoice).run(doc)
 print(result.document.extraction)
 ```
 
+### Self-hosted OCR — `unlimited-ocr` (v0.6, Baidu Unlimited-OCR)
+
+A newer self-hosted alternative to Nanonets-OCR2-3B. Same install
+(`pip install py-idp[hf-vlm]`, ~7 GB model download), same opt-in gate
+pattern, but with two architectural advantages:
+
+1. **Multi-page context (32K tokens)** — dozens of pages fit in a single
+   forward pass via the model's native `model.infer_multi()` API. No
+   per-page loop. Cross-page reasoning actually works (e.g. "see
+   appendix A" → the model reads the appendix).
+2. **Reference Sliding Window Attention (R-SWA)** — constant KV cache
+   throughout decoding, so memory does not grow with output length.
+   For long documents the per-page slowdown you see with vanilla
+   attention is gone.
+
+```bash
+pip install py-idp[hf-vlm]        # same deps as Nanonets
+export IDP_ENABLE_UNLIMITED_OCR=1 # explicit opt-in
+export IDP_BACKEND=unlimited-ocr
+idp run long-contract.pdf --schema Contract --backend unlimited-ocr
+```
+
+When to choose each:
+
+| backend | best for |
+|---|---|
+| `nanonets` | Single-page docs, mature prompt, M-series Mac with limited RAM |
+| `unlimited-ocr` | Multi-page docs (≥5 pages), need cross-page reasoning, MIT license |
+
+Both backends reuse the `[hf-vlm]` extra; install once, opt in per backend.
+
+**Security note** — `unlimited-ocr` uses `trust_remote_code=True` to load
+the model's custom DeepSeek-OCR-2 base + R-SWA decoder. Review the
+upstream code if this is a concern; users who prefer not to run the
+custom code can deploy via the SGLang-server path and use a plain
+OpenAI-compat client instead (a separate backend, out of scope for v0.6).
+
+```python
+from idp.llm.unlimited_ocr import UnlimitedOcrBackend
+backend = UnlimitedOcrBackend(
+    device="auto",         # "cuda" | "mps" | "cpu"
+    mode="gundam",         # "gundam" (640x640 tiles, single) | "base" (1024x1024, multi)
+    load_in_4bit=False,
+)
+# When Message.images_b64 has >1 image, the backend automatically
+# uses model.infer_multi() (single forward pass) instead of model.infer().
+```
+
 ### Auto-chunking for oversized documents
 
 Nanonets-OCR2-3B has a 16k token context. A 50-page invoice PDF won't
