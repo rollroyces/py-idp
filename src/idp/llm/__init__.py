@@ -19,6 +19,7 @@ from idp.llm.backend import (
     OpenAICompatBackend,
     get_backend,
     list_backends,
+    register_backend,
 )
 from idp.llm.china import (
     CHINA_PROVIDER_PRESETS,
@@ -51,4 +52,5 @@ __all__ = [
     "list_backends",
     "list_china_providers",
     "list_international_providers",
+    "register_backend",
 ]
