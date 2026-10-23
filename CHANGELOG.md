@@ -5,7 +5,7 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
-## [0.6.0] — Unreleased — Unlimited-OCR backend
+## [0.6.0] — 2026-10-23 — Unlimited-OCR backend
 
 Adds `baidu/Unlimited-OCR` (Baidu, arXiv 2606.23050) as a parallel
 self-hosted OCR backend. Differentiation over Nanonets-OCR2-3B: 32K
@@ -28,18 +28,39 @@ appendix).
 * **Wired into `get_backend("unlimited-ocr")` and `list_backends()`** —
   same gated-registration pattern as `nanonets`. Reuses the existing
   `[hf-vlm]` extra (no new pip dependencies).
-* **`tests/test_unlimited_ocr_backend.py`** — 23 tests covering gating,
+* **`tests/test_unlimited_ocr_backend.py`** — 28 tests covering gating,
   lazy load, image extraction, infer vs infer_multi routing, marker
-  stripping, device resolution, 4-bit quantization, and the helpful
-  ImportError when torch/transformers are missing.
-* **Tests for `list_backends()` gating** — `tests/test_backend_registry_helpers.py`
-  gains `test_list_backends_includes_unlimited_ocr_when_gated_on`.
+  stripping, device resolution, dtype validation, 4-bit quantization,
+  recursive output-file discovery, and the helpful ImportError when
+  torch/transformers are missing.
+* **`tests/test_version_consistency.py`** — 4 tests pinning
+  `pyproject.toml`, `src/idp/__init__.py`, and `CITATION.cff` to the same
+  version string. Prevents the drift that shipped v0.5.0 with
+  `idp.__version__ == "0.4.0"`.
+
+### Fixed
+
+* **`_resolve_dtype` raised a bare `KeyError`** on an unrecognized
+  `dtype=` value. Now raises `ValueError` naming the accepted choices,
+  matching the clear-message pattern used elsewhere in the file.
+* **`_read_output_text` used a non-recursive glob**, so a model version
+  writing per-page output into a subdirectory would silently return
+  empty text (the pipeline then extracted nothing, with no error). Now
+  uses `rglob()` with an `is_file()` guard.
+* **`_infer_text_only` renamed to `_infer_synthetic_placeholder`.** The
+  model has no text-only entry point — every documented path requires an
+  image — so the old name implied behavior that does not exist.
+* **Version drift** — `src/idp/__init__.py` sat at `0.4.0` while
+  `pyproject.toml` was at `0.5.0`, so `pip install py-idp==0.5.0` then
+  `idp.__version__` reported the wrong number. `CITATION.cff` was staler
+  still (`0.3.1.post1`). All three now read `0.6.0`.
 
 ### Reuses
 
-* `[hf-vlm]` extra (no new pip dependencies; the Unlimited-OCR `trust_remote_code`
-  model and Nanonets share identical deps: `torch`, `transformers`,
-  `accelerate`, `safetensors`, `Pillow`, `huggingface-hub`)
+* `[hf-vlm]` extra (no new pip dependencies; the Unlimited-OCR
+  `trust_remote_code` model and Nanonets share identical deps: `torch`,
+  `transformers`, `accelerate`, `safetensors`, `Pillow`,
+  `huggingface-hub`)
 * Existing `idp.llm.Backend` ABC and `is_multimodal` contract
 * `Message.images_b64: list[str]` field for image attach
 * `_safe_json` downstream parser (works on the marker-stripped text)
