@@ -292,13 +292,13 @@ def test_strip_det_markers_handles_empty_and_none():
 
 
 # ---------------------------------------------------------------------------
-# 13. Text-only fallback when no images attached
+# 13. Placeholder fallback when no images attached
 # ---------------------------------------------------------------------------
-def test_infer_text_only_fallback_when_no_images():
-    """When Message.images_b64 is empty, the backend synthesizes a 1x1 placeholder
-    and calls model.infer as a text+image call. This mirrors the real
-    model's behavior (it expects an image tile) and gives the user a
-    reasonable result instead of crashing.
+def test_synthetic_placeholder_fallback_when_no_images():
+    """When Message.images_b64 is empty, the backend synthesizes a blank
+    placeholder tile and routes through model.infer (Unlimited-OCR has
+    no text-only entry point). Gives the caller a parseable result
+    instead of crashing.
     """
     backend = _make_backend_with_mock_model()
     req = CompletionRequest(
@@ -308,6 +308,8 @@ def test_infer_text_only_fallback_when_no_images():
     # The mock write produced "infer_output_text_for_<stem>" -- the stem
     # is "page.png" from the synthetic placeholder.
     assert "infer_output_text_for_page" in out
+    backend._model.infer.assert_called_once()
+    backend._model.infer_multi.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -497,3 +499,64 @@ def test_resolve_mode_explicit_respected_when_single():
 def test_resolve_mode_multi_image_always_base_even_if_user_set_gundam():
     b = UnlimitedOcrBackend(mode="gundam")
     assert b._resolve_mode(2) == "base"  # multi forces base
+
+
+# ---------------------------------------------------------------------------
+# Regression tests from the v0.6 code review
+# ---------------------------------------------------------------------------
+def test_resolve_dtype_rejects_unknown_dtype_with_clear_message():
+    """A typo like dtype='int8' must raise ValueError naming the valid
+    options, not a bare KeyError from the dict lookup.
+
+    Regression: `return mapping[self.dtype]` raised an opaque
+    KeyError('int8') from inside complete(), with no hint about which
+    values are accepted.
+    """
+    b = UnlimitedOcrBackend(device="cpu", dtype="int8")
+    fake_torch = MagicMock()
+    with pytest.raises(ValueError) as exc:
+        b._resolve_dtype(fake_torch, "cuda")
+    msg = str(exc.value)
+    assert "int8" in msg
+    # The message must enumerate the valid choices
+    for valid in ("auto", "bfloat16", "float16", "float32"):
+        assert valid in msg
+
+
+def test_resolve_dtype_accepts_all_documented_values():
+    """Every documented dtype string resolves without raising."""
+    fake_torch = MagicMock()
+    fake_torch.bfloat16 = "bf16"
+    fake_torch.float16 = "f16"
+    fake_torch.float32 = "f32"
+    fake_torch.cuda.is_available.return_value = True
+    b = UnlimitedOcrBackend(device="cuda", dtype="float16")
+    assert b._resolve_dtype(fake_torch, "cuda") == "f16"
+
+
+def test_read_output_text_finds_nested_files(tmp_path):
+    """Model output in a subdirectory is still picked up.
+
+    Regression: `out.glob('*.md')` is non-recursive, so a model version
+    that writes `output_path/<page>/out.md` silently yielded empty text
+    and the pipeline extracted nothing.
+    """
+    nested = tmp_path / "page_0001"
+    nested.mkdir()
+    (nested / "out.md").write_text("nested page text", encoding="utf-8")
+    got = UnlimitedOcrBackend._read_output_text(tmp_path)
+    assert "nested page text" in got
+
+
+def test_read_output_text_still_reads_flat_files(tmp_path):
+    """Flat .md + .txt output (the current documented layout) works."""
+    (tmp_path / "a.md").write_text("from md", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("from txt", encoding="utf-8")
+    got = UnlimitedOcrBackend._read_output_text(tmp_path)
+    assert "from md" in got
+    assert "from txt" in got
+
+
+def test_read_output_text_missing_dir_returns_empty(tmp_path):
+    """A nonexistent output dir returns '' so _safe_json sees '{}'."""
+    assert UnlimitedOcrBackend._read_output_text(tmp_path / "nope") == ""

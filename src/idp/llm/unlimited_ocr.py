@@ -201,7 +201,7 @@ class UnlimitedOcrBackend(Backend):
                 "falling back to text-only mode. Accuracy will be lower than "
                 "passing the actual page images."
             )
-            return self._infer_text_only(text)
+            return self._infer_synthetic_placeholder(text)
         if len(images) == 1:
             return self._infer_single(text, images[0])
         return self._infer_multi(text, images)
@@ -354,7 +354,14 @@ class UnlimitedOcrBackend(Backend):
         return "cpu"
 
     def _resolve_dtype(self, torch: Any, device: str) -> Any:
-        """bfloat16 on capable hardware, else float16 (NEVER float32 by default)."""
+        """bfloat16 on capable hardware, float32 on CPU-only.
+
+        Raises:
+            ValueError: when ``dtype=`` is not one of the accepted
+                strings. Without this guard a typo like ``dtype="int8"``
+                surfaces as a bare ``KeyError`` from inside the
+                ``complete()`` call with no hint about valid values.
+        """
         if self.dtype == "auto":
             if device == "cpu" and not torch.cuda.is_available():
                 # CPU-only: float32 has better numerical stability and SIMD
@@ -366,6 +373,11 @@ class UnlimitedOcrBackend(Backend):
             "float16": torch.float16,
             "float32": torch.float32,
         }
+        if self.dtype not in mapping:
+            raise ValueError(
+                f"UnlimitedOcrBackend: dtype={self.dtype!r} is not supported. "
+                f"Choose from {sorted(mapping)} or 'auto'."
+            )
         return mapping[self.dtype]
 
     def _build_prompt(self, req: CompletionRequest) -> str:
@@ -443,16 +455,21 @@ class UnlimitedOcrBackend(Backend):
         # "auto" -> gundam for single, base for multi (already handled above)
         return DEFAULT_MODE_SINGLE
 
-    def _infer_text_only(self, text: str) -> str:
-        """Generate from text only (no images). Lower accuracy — fallback path.
+    def _infer_synthetic_placeholder(self, text: str) -> str:
+        """Fallback when no document images are attached.
 
-        Unlimited-OCR can be invoked without images, but the model card
-        only documents the image path. We construct a synthetic call by
-        rendering a small placeholder image; the model will mostly
-        ignore it and respond to the prompt. If the model API rejects
-        text-only calls, callers will see a clear ``RuntimeError``.
+        Unlimited-OCR has no text-only entry point — every documented
+        path (``model.infer`` / ``model.infer_multi``) requires at least
+        one image. Rather than raise, we render a small blank
+        placeholder and route through the normal single-image path so
+        callers get a parseable result and the existing warning log at
+        :meth:`complete` has already fired.
+
+        Accuracy here is undefined: the model will mostly ignore the
+        blank tile and respond to the prompt. Prefer attaching real page
+        images (``Message.images_b64``) — the OCR backend is pointless
+        without them.
         """
-        # Synthesize a 1x1 white image so the model has a tile to look at.
         from PIL import Image
 
         placeholder = Image.new("RGB", (32, 32), color=(255, 255, 255))
@@ -518,23 +535,25 @@ class UnlimitedOcrBackend(Backend):
         """Read the model's output text from its output directory.
 
         ``model.infer()`` / ``model.infer_multi()`` with ``save_results=True``
-        write the OCR'd text into a per-image file under ``output_path``.
+        write the OCR'd text into per-image files under ``output_path``.
         The exact filename pattern is implementation-defined in the
-        upstream model code; the most reliable cross-version strategy is
-        to walk the output dir, read all ``*.txt`` / ``*.md`` files, and
-        concatenate them in sorted order.
+        upstream model code, so we glob recursively for ``*.txt`` / ``*.md``
+        and concatenate in sorted order. Recursive (``rglob``) rather
+        than flat so a model version that nests per-page files in a
+        subdirectory still gets picked up instead of silently yielding
+        empty text.
 
         If no readable file is found, we return an empty string so the
         downstream ``_safe_json`` parser sees a parseable (empty) result
         rather than crashing.
         """
-        from pathlib import Path as _P
-
-        out = _P(output_dir)
+        out = Path(output_dir)
         if not out.exists():
             return ""
         texts: list[str] = []
-        for f in sorted(out.glob("*.md")) + sorted(out.glob("*.txt")):
+        for f in sorted(out.rglob("*.md")) + sorted(out.rglob("*.txt")):
+            if not f.is_file():
+                continue
             try:
                 texts.append(f.read_text(encoding="utf-8"))
             except Exception as e:  # noqa: BLE001
