@@ -74,7 +74,7 @@ def test_example_registers_echo_backend_via_decorator():
         "assert spec.loader is not None; "
         "spec.loader.exec_module(m); "
         "from idp.llm.backend import list_backends; "
-        "names = list_backends(); "
+        "names = [e['name'] for e in list_backends()]; "
         "assert 'echo' in names, f'echo not in {names}'; "
         "print('echo registered');"
     )

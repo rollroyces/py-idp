@@ -11,8 +11,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from idp.llm.backend import (
-    _REGISTRY,
-    _REGISTRY_ALIASES,
     AnthropicBackend,
     Backend,
     CompletionRequest,

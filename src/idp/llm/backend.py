@@ -148,15 +148,6 @@ def register_backend(name: str):
     return deco
 
 
-def list_backends() -> list[str]:
-    """Sorted list of canonical backend names registered via ``register_backend``.
-
-    Does not include aliases, nor gated backends (slowmock, nanonets) which
-    require env-var opt-in. Useful for CLI help / docs.
-    """
-    return sorted(_REGISTRY.keys())
-
-
 # ---------------------------------------------------------------------------
 # Mock backend — deterministic, no network. Used by tests and the eval CI.
 # ---------------------------------------------------------------------------
@@ -530,6 +521,15 @@ def get_backend(name: str = "auto", **kwargs: Any) -> Backend:
     return cls(**kwargs)
 
 
+# Names registered by this module itself. Anything else appearing in
+# ``_REGISTRY`` arrived through a user-supplied ``@register_backend(...)``
+# decorator at import time and is reported by ``list_backends()`` as a
+# custom entry.
+_BUILTIN_REGISTRY_NAMES: frozenset[str] = frozenset(
+    {"mock", "openai-compat", "anthropic"}
+)
+
+
 def list_backends() -> list[dict[str, str]]:
     """Enumerate every backend name the registry knows about.
 
@@ -586,6 +586,15 @@ def list_backends() -> list[dict[str, str]]:
             )
     except ImportError:
         pass
+
+    # Backends registered at runtime via @register_backend("name"). Built-in
+    # names and anything already described above are skipped, so the curated
+    # family/auth metadata always wins over a decorator re-registration.
+    already = {entry["name"] for entry in out}
+    for reg_name in _REGISTRY:
+        if reg_name in already or reg_name in _BUILTIN_REGISTRY_NAMES:
+            continue
+        out.append({"name": reg_name, "family": "custom", "auth": "unknown"})
     # Gated / opt-in backends — listed but flagged
     if os.environ.get("IDP_ENABLE_SLOWMOCK") == "1":
         out.append({"name": "slowmock", "family": "gated", "auth": "gated"})
@@ -722,12 +731,13 @@ def _stub(
             if isinstance(branch, dict) and branch.get("type") != "null":
                 return _stub(branch, defs)
         return None
-    if "allOf" in schema:
+    # Only treat "allOf" as a combinator when it actually holds a list.
+    # A malformed schema such as {"allOf": 0} would otherwise be merged
+    # into an empty dict and silently drop every key it carried.
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list | tuple):
         merged: dict[str, Any] = {}
-        branches = schema["allOf"]
-        if not isinstance(branches, list | tuple):
-            branches = []
-        for branch in branches:
+        for branch in all_of:
             if isinstance(branch, dict):
                 merged.update({k: v for k, v in branch.items() if k != "allOf"})
         return _stub(merged, defs)

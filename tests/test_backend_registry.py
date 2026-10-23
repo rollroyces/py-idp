@@ -12,7 +12,7 @@ Covers:
   - get_backend("china:qwen") returns OpenAICompatBackend pointing at DashScope
   - get_backend("slowmock") without IDP_ENABLE_SLOWMOCK=1 raises ValueError
   - get_backend("nanonets") without IDP_ENABLE_NANONETS=1 raises ValueError
-  - list_backends() returns sorted list and is non-empty
+  - list_backends() returns {"name","family","auth"} entries, incl. custom ones
   - Registering a new backend via decorator + get_backend("newname") works
 """
 from __future__ import annotations
@@ -195,14 +195,42 @@ def test_nanonets_without_env_var_raises(clean_env):
         b.get_backend("nanonets")
 
 
-def test_list_backends_returns_sorted_nonempty(clean_env):
+def test_list_backends_returns_entries_with_metadata(clean_env):
+    """list_backends() returns {"name","family","auth"} dicts (v0.5 API)."""
     b = clean_env
     result = b.list_backends()
     assert isinstance(result, list)
     assert len(result) >= 2  # at least mock + openai-compat (+anthropic)
-    assert result == sorted(result)
-    assert "mock" in result
-    assert "openai-compat" in result
+    for entry in result:
+        assert set(entry) == {"name", "family", "auth"}
+    names = [e["name"] for e in result]
+    assert "mock" in names
+    # "openai-compat" is the registry key; the advertised names are its
+    # aliases ("openai"/"compat"/"vllm"/"lm-studio") plus "anthropic".
+    assert "openai" in names
+    assert "anthropic" in names
+    # Names must be unique — the registry tail must not duplicate curated rows.
+    assert len(names) == len(set(names))
+
+
+def test_list_backends_includes_decorator_registered_backend(clean_env):
+    """A backend added via @register_backend shows up in list_backends()."""
+    b = clean_env
+
+    @b.register_backend("__listed_dummy__")
+    class _Listed(b.Backend):
+        name = "__listed_dummy__"
+
+        def complete(self, req):  # pragma: no cover - never called
+            raise NotImplementedError
+
+    try:
+        names = [e["name"] for e in b.list_backends()]
+        assert "__listed_dummy__" in names
+        entry = next(e for e in b.list_backends() if e["name"] == "__listed_dummy__")
+        assert entry["family"] == "custom"
+    finally:
+        b._REGISTRY.pop("__listed_dummy__", None)
 
 
 def test_registry_aliases_map_is_preserved(clean_env):
