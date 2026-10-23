@@ -173,9 +173,10 @@ class FileTooLargeError(IDPError):
     http_status = 413
 
 
-# Backwards-compat alias: ``TimeoutError`` clashes with the builtin in
-# Python 3.11+ on stdin-like paths, so prefer ``TimeoutError_``.
-TimeoutError = TimeoutError_  # type: ignore[misc]
+# NOTE: deliberately no ``TimeoutError = TimeoutError_`` alias here. A
+# module-level binding of that name shadows the builtin for the whole module,
+# which made ``is_transient()`` test ``isinstance`` against the py-idp error
+# instead of the real ``TimeoutError``. Callers import ``TimeoutError_``.
 
 
 __all__ = [
@@ -190,7 +191,6 @@ __all__ = [
     "StorageError",
     "TemplateNotFoundError",
     "TemplateParseError",
-    "TimeoutError",
     "TimeoutError_",
     "classify_status",
     "error_envelope",

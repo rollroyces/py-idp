@@ -196,7 +196,7 @@ def process_batch(
             if r.ok:
                 write_to_delta(r.to_dict())
             else:
-                log.error(f"Failed: {r.path}: {r.error}")
+                _log.error(f"Failed: {r.path}: {r.error}")
     """
     # Resolve checkpoint store (lazy construction from string or Path)
     cp: CheckpointStore | None = None
@@ -205,7 +205,7 @@ def process_batch(
         if archive_at_start:
             archived = cp.archive()
             if archived is not None:
-                log.info(
+                _log.info(
                     "checkpoint: archived previous run to %s; starting fresh",
                     archived,
                 )
@@ -220,7 +220,7 @@ def process_batch(
     for i, path in enumerate(paths_iter, start=1):
         # Idempotent resume: skip paths already in the checkpoint.
         if cp is not None and path in cp:
-            log.info("checkpoint: skipping already-done path %s", path)
+            _log.info("checkpoint: skipping already-done path %s", path)
             continue
         t0 = time.perf_counter()
         try:
@@ -265,15 +265,15 @@ def process_batch(
                 # Don't let a checkpoint write failure kill the batch —
                 # the user can always retry; the only cost is reprocessing
                 # the docs that didn't get recorded.
-                log.warning("checkpoint: failed to record %s: %s", item.path, e)
+                _log.warning("checkpoint: failed to record %s: %s", item.path, e)
         if progress_every and i % progress_every == 0 and total:
-            log.info("Batch progress: %d / %d (%.1f%%)",
+            _log.info("Batch progress: %d / %d (%.1f%%)",
                      i, total, 100 * i / total)
         if on_progress is not None:
             try:
                 on_progress(i, total or -1, item)
             except Exception:
-                log.exception("on_progress callback raised (ignored)")
+                _log.exception("on_progress callback raised (ignored)")
         yield item
 
 
