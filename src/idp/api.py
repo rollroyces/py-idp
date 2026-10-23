@@ -24,14 +24,22 @@ multi-tenant auth (these are deployment-level concerns).
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import hashlib
+import hmac
+import json as _json  # local alias to avoid shadowing issues elsewhere
 import os
 import re
+import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,18 +58,54 @@ from idp.errors import (
 )
 from idp.metrics import metrics
 from idp.pipeline.pipeline import Pipeline
+from idp.queue.jobs import InProcessQueue, Job
 from idp.ratelimit import RateLimiter
+from idp.storage.store import InMemoryStorage, StoredResult
 from idp.templates import TemplateRegistry
 
 # Module-level logger; configured at lifespan startup.
 _log = get_logger("idp.api")
 _settings: Settings | None = None
 _rate_limiter: RateLimiter | None = None
+_async_rate_limiter: RateLimiter | None = None  # per-API-key cap on /extract_async
 _upload_dir: Path | None = None
 _template_registry: TemplateRegistry | None = None
+_job_queue: InProcessQueue | None = None
+_results_store: InMemoryStorage | None = None
 
 # Request-ID header name (lowercase; FastAPI normalizes).
 _REQUEST_ID_HEADER = "x-request-id"
+_SIGNATURE_HEADER = "X-IDP-Signature"
+_SIGNATURE_SCHEME = "sha256"
+_TIMESTAMP_HEADER = "X-IDP-Timestamp"
+_NONCE_HEADER = "X-IDP-Nonce"
+
+# Bounded LRU cache of nonces we've seen on /verify_signature. Acts as
+# a single-shot blacklist — replay protection. The OrderedDict lets
+# us pop the oldest entry when we exceed the configured maxsize.
+_nonce_cache: OrderedDict[str, None] = OrderedDict()
+_nonce_lock = threading.Lock()
+
+
+def _nonce_check_and_add(nonce: str, maxsize: int) -> bool:
+    """Record ``nonce``; return True iff it was new.
+
+    Side effect: bounded LRU eviction of the oldest nonces when full.
+    Thread-safe.
+    """
+    with _nonce_lock:
+        if nonce in _nonce_cache:
+            return False
+        _nonce_cache[nonce] = None
+        while len(_nonce_cache) > maxsize:
+            _nonce_cache.popitem(last=False)
+        return True
+
+
+def _nonce_cache_reset() -> None:
+    """Clear the nonce cache (for tests only)."""
+    with _nonce_lock:
+        _nonce_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +197,8 @@ def auth(request: Request) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Configure logging, validate settings, prep upload dir, load templates."""
-    global _settings, _rate_limiter, _upload_dir, _template_registry
+    global _settings, _rate_limiter, _async_rate_limiter, _upload_dir, _template_registry
+    global _job_queue, _results_store
 
     # Load settings (raises ConfigurationError -> startup aborts with 500)
     try:
@@ -184,6 +229,12 @@ async def lifespan(app: FastAPI):
         per_key_per_minute=_settings.rate_limit_per_minute,
         global_per_minute=0,  # disabled by default; set via env if needed
     )
+    # /extract_async uses a separate, smaller budget. Built fresh on
+    # every lifespan so tests can override Settings before startup.
+    _async_rate_limiter = RateLimiter(
+        per_key_per_minute=_settings.idp_async_rate_limit_per_minute,
+        global_per_minute=0,  # per-key only
+    )
 
     _upload_dir = Path(os.environ.get("IDP_UPLOAD_DIR", "/tmp/idp-uploads"))
     _upload_dir.mkdir(parents=True, exist_ok=True)
@@ -210,14 +261,119 @@ async def lifespan(app: FastAPI):
         template_dir if len(_template_registry) else "(bundled defaults)",
     )
 
+    # Async submission infrastructure: in-process job queue + result store.
+    # The queue runs pipeline.arun() off the event-loop thread that serves
+    # /extract_async. Each job gets its own asyncio.run() call so the worker's
+    # event loop is independent. The results store is in-memory only —
+    # production deployments should swap it for SqlStorage via the existing
+    # Settings.storage_backend knob (future P-tier work).
+    _results_store = InMemoryStorage()
+
+    def _job_runner(job: Job) -> None:
+        """Worker tick: load doc, run pipeline, persist result, fire webhook.
+
+        Synchronous wrapper (matches InProcessQueue's runner contract).
+        Pipeline.run() is the canonical sync entry point; arun is only
+        added in the P0 audit branch (audit/p0-fixes-v0.3.9). On a
+        P0-equipped checkout, prefer arun when present so the request
+        loop isn't blocked.
+        """
+        schema_name = job.schema_name
+        backend_name = job.backend_name
+        doc = Document.from_path(job.doc_path)
+        pipeline = Pipeline(backend=backend_name, schema=schema_name)
+
+        def _run_sync() -> Any:
+            arun = getattr(pipeline, "arun", None)
+            if arun is None:
+                # Pre-P0 fallback: synchronous Pipeline.run.
+                return pipeline.run(doc)
+            # P0+: arun exists; drive it on a private event loop so we
+            # don't collide with the FastAPI request loop. The worker
+            # is itself an asyncio task, so we cannot call asyncio.run().
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(arun(doc))
+            finally:
+                loop.close()
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        started = time.perf_counter()
+        success = True
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            try:
+                res = ex.submit(_run_sync).result()
+            except Exception as e:  # noqa: BLE001
+                job.error = str(e)
+                metrics.inc("async_jobs_failed", 1, backend=backend_name, error_type=type(e).__name__)
+                success = False
+                return
+        duration = time.perf_counter() - started
+        metrics.observe("async_job_duration_seconds", duration, backend=backend_name)
+
+        stored = _pipeline_result_to_stored(res, job)
+        if _results_store is not None:
+            result_id = _results_store.put(stored)
+            job.result_id = result_id
+            job.extra["result_id"] = result_id
+            # Fire the webhook (best-effort; do not raise if it fails).
+            cb = job.extra.get("callback_url")
+            cb_secret = job.extra.get("callback_secret")
+            if cb:
+                _post_webhook(cb, stored, cb_secret)
+        # Final job-state metric. We track success locally because
+        # ``job.status`` is set by the InProcessQueue worker AFTER the
+        # runner returns (it's still RUNNING while we're in this body).
+        # A failed runner returns early above (``success = False``),
+        # so checking the local flag avoids the timing race.
+        if success:
+            metrics.inc("async_jobs_succeeded", 1, backend=backend_name)
+
+    _job_queue = InProcessQueue(
+        runner=_job_runner,
+        max_concurrent=_settings.idp_async_max_concurrent,
+    )
+    await _job_queue.start()
+    _log.info(
+        "async job queue started (in-process, max_concurrent=%d, async_rl=%d/min)",
+        _settings.idp_async_max_concurrent, _settings.idp_async_rate_limit_per_minute,
+    )
+
+    # Background gauge-refresh task: every 1s, publish current queue depth
+    # and inflight count so /metrics shows fresh values without operators
+    # needing to poll /jobs/{id}.
+    import asyncio as _asyncio
+
+    queue_ref = _job_queue  # capture the local, non-None reference
+
+    async def _refresh_async_gauges() -> None:
+        try:
+            while True:
+                metrics.gauge("async_queue_depth", queue_ref.queue_depth)
+                metrics.gauge("async_inflight_jobs", queue_ref.inflight)
+                await _asyncio.sleep(1.0)
+        except _asyncio.CancelledError:
+            return
+
+    _gauge_task = _asyncio.create_task(_refresh_async_gauges())
+
     yield
 
     # Shutdown: clean up, log final metrics
     _log.info("py-idp API shutting down. metrics: %s", metrics.snapshot())
+    _gauge_task.cancel()
+    with contextlib.suppress(_asyncio.CancelledError):
+        await _gauge_task
+    if _job_queue is not None:
+        await _job_queue.stop()
     _settings = None
     _rate_limiter = None
+    _async_rate_limiter = None
     _upload_dir = None
     _template_registry = None
+    _job_queue = None
+    _results_store = None
 
 
 app = FastAPI(
@@ -469,6 +625,261 @@ async def extract_sync(
 
 
 # ---------------------------------------------------------------------------
+# Async /extract_async + webhook + signed result
+# ---------------------------------------------------------------------------
+@app.post(
+    "/extract_async",
+    dependencies=[Depends(auth)],
+)
+async def extract_async(
+    request: Request,
+    file: UploadFile,
+    schema_name: str | None = Form(default=None),
+    backend: str | None = Form(default=None),
+    callback_url: str | None = Form(default=None),
+    callback_secret: str | None = Form(default=None),
+) -> JSONResponse:
+    """Submit an extraction job. Returns 202 Accepted immediately.
+
+    Form fields:
+      - ``schema_name``     optional — same semantics as /extract.
+      - ``backend``         optional — same semantics as /extract.
+      - ``callback_url``    optional — when the job finishes, the server
+                            POSTs the result JSON to this URL. Must be
+                            ``https://<hostname>`` or ``http://localhost``
+                            / ``http://127.0.0.1`` (SSRF guard; anything
+                            else returns 400).
+      - ``callback_secret`` optional — HMAC-SHA256 signing secret for the
+                            webhook payload. If omitted, the server's
+                            ``Settings.api_key`` (or env
+                            ``IDP_RESULT_SIGNING_KEY``) is used.
+
+    Response shape::
+
+        {
+          "job_id": "<16-char id>",
+          "status_url": "/jobs/<job_id>",
+          "result_url": "/results/<result_id>"
+        }
+
+    Note: ``result_url`` is populated only after the job runs and writes
+    the StoredResult; before that, GETting the result_url returns 404.
+    """
+    s = _require_settings()
+    raw = await _read_capped(file, s.max_upload_bytes)
+    upload_dir = _require_upload_dir()
+    dst = _safe_upload_path(upload_dir, file.filename or "")
+    dst.write_bytes(raw)
+
+    if callback_url:
+        _ssrf_check_callback_url(callback_url)
+
+    # Per-API-key rate-limit on async submissions. /extract_async is
+    # heavier than /extract (each call enqueues work the server runs
+    # off-loop), so it gets its own smaller per-minute budget. Keyed on
+    # the API key the caller presented; falls back to "_anon" to share
+    # a bucket across unauthenticated submissions. Fails closed via
+    # RateLimitedError (mapped to 429 + Retry-After by the existing
+    # exception handler).
+    _api_key = (
+        request.headers.get("X-API-Key")
+        or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        or "_anon"
+    )
+    if _async_rate_limiter is not None:
+        _async_rate_limiter.check(key=_api_key)
+
+    # Template routing mirrors /extract
+    reg = _require_template_registry()
+    if schema_name is None:
+        match = reg.find_for_filename(filename=dst.name, mime=file.content_type)
+        if match is not None:
+            schema_name = match.schema
+
+    queue = _require_job_queue()
+    # InProcessQueue.submit takes (doc_path, schema_name, backend_name).
+    # We pass callback info via Job.extra so the runner can fire the webhook.
+    job = await queue.submit(
+        str(dst),
+        schema_name or "Invoice",
+        backend or s.default_backend,
+    )
+    if callback_url:
+        job.extra["callback_url"] = callback_url
+    if callback_secret:
+        job.extra["callback_secret"] = callback_secret
+
+    metrics.inc("async_submissions", 1, schema=schema_name or "_none")
+    return JSONResponse(
+        status_code=202,
+        content={
+            "job_id": job.id,
+            "status_url": f"/jobs/{job.id}",
+            "result_url": f"/results/{job.result_id}" if job.result_id else None,
+        },
+        headers={"Location": f"/jobs/{job.id}"},
+    )
+
+
+@app.get("/jobs/{job_id}", dependencies=[Depends(auth)])
+async def get_job_status(job_id: str) -> dict[str, Any]:
+    """Return job status (pending / running / succeeded / failed).
+
+    Includes ``estimated_queue_position`` when the job is still queued
+    (returns 0 if currently running, None if finished) so callers can
+    decide whether to back off or wait.
+    """
+    queue = _require_job_queue()
+    job = await queue.status(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job_id {job_id!r}")
+    payload: dict[str, Any] = {
+        "job_id": job.id,
+        "status": job.status.value,
+        "schema_name": job.schema_name,
+        "backend_name": job.backend_name,
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "finished_at": job.finished_at,
+        "error": job.error,
+        "estimated_queue_position": queue.estimated_queue_position(job_id),
+    }
+    # Live queue depth + inflight for observability
+    payload["queue_depth"] = queue.queue_depth
+    payload["inflight_jobs"] = queue.inflight
+    if job.result_id:
+        payload["result_id"] = job.result_id
+        payload["result_url"] = f"/results/{job.result_id}"
+    return payload
+
+
+@app.get("/results/{result_id}", dependencies=[Depends(auth)])
+async def get_result(result_id: str) -> dict[str, Any]:
+    """Return a stored extraction result as JSON."""
+    store = _require_results_store()
+    stored = store.get(result_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail=f"unknown result_id {result_id!r}"
+        )
+    return _stored_to_wire(stored)
+
+
+@app.post("/results/{result_id}/signed", dependencies=[Depends(auth)])
+async def get_signed_result(result_id: str) -> JSONResponse:
+    """Return the result + HMAC-SHA256 signature for tamper detection.
+
+    The signature is computed over
+    ``timestamp + "." + nonce + "." + json.dumps(result, sort_keys=True)``
+    using either ``Settings.api_key`` or env ``IDP_RESULT_SIGNING_KEY``
+    when no per-job secret is on file. Webhook consumers should verify
+    the signature (and the timestamp + nonce freshness) before trusting
+    the payload — protects against MITM when the webhook URL is on a
+    non-TLS path (dev only).
+
+    Response shape::
+
+        {
+          "result": {...},
+          "signature": "sha256=<64-char hex>",
+          "timestamp": "<unix-epoch-seconds as string>",
+          "nonce": "<uuid4 hex, 16 chars>"
+        }
+
+    Headers echo the same three values for clients that prefer headers
+    over a JSON body (``X-IDP-Signature``, ``X-IDP-Timestamp``,
+    ``X-IDP-Nonce``).
+    """
+    store = _require_results_store()
+    stored = store.get(result_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail=f"unknown result_id {result_id!r}"
+        )
+    wire = _stored_to_wire(stored)
+    body_bytes = _json.dumps(wire, sort_keys=True).encode("utf-8")
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex[:16]
+    try:
+        sig = _sign_payload(
+            timestamp.encode("utf-8") + b"." +
+            nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret=None,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return JSONResponse(
+        content={"result": wire, "signature": sig,
+                 "timestamp": timestamp, "nonce": nonce},
+        headers={
+            _SIGNATURE_HEADER: sig,
+            _TIMESTAMP_HEADER: timestamp,
+            _NONCE_HEADER: nonce,
+        },
+    )
+
+
+class VerifySignatureRequest(BaseModel):
+    """Body for POST /verify_signature — replay-protected HMAC check."""
+
+    result: dict[str, Any]
+    signature: str  # "sha256=<64-char hex>"
+    timestamp: str  # unix-epoch-seconds as string
+    nonce: str  # uuid4 hex, 16 chars
+
+
+@app.post("/verify_signature", dependencies=[Depends(auth)])
+async def verify_signature(req_body: VerifySignatureRequest) -> dict[str, Any]:
+    """Verify a signed result envelope end-to-end.
+
+    Three checks, all must pass:
+      1. ``timestamp`` within ``IDP_SIGNATURE_MAX_AGE_SECONDS`` of now()
+         (set to 0 to disable — replay becomes possible).
+      2. ``nonce`` not previously seen (server-side bounded LRU).
+      3. ``signature`` matches HMAC-SHA256 over the canonical bytes.
+
+    Returns ``{"valid": true}`` on success. Returns ``{"valid": false,
+    "reason": "..."}`` on any check failure (status 200 either way so
+    callers don't have to handle two HTTP codes — they read the JSON).
+    """
+    s = _require_settings()
+    now = int(time.time())
+    try:
+        ts_int = int(req_body.timestamp)
+    except (TypeError, ValueError):
+        return {"valid": False, "reason": "timestamp not an integer"}
+    age = abs(now - ts_int)
+    if s.idp_signature_max_age_seconds > 0 and age > s.idp_signature_max_age_seconds:
+        return {
+            "valid": False,
+            "reason": f"timestamp too old or future-dated ({age}s > "
+                      f"{s.idp_signature_max_age_seconds}s)",
+        }
+
+    # Nonce freshness (replay protection)
+    if not _nonce_check_and_add(req_body.nonce, maxsize=s.idp_nonce_cache_maxsize):
+        return {"valid": False, "reason": "nonce already seen (replay?)"}
+
+    # Signature match
+    body_bytes = _json.dumps(req_body.result, sort_keys=True).encode("utf-8")
+    try:
+        expected = _sign_payload(
+            req_body.timestamp.encode("utf-8") + b"." +
+            req_body.nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret=None,
+        )
+    except RuntimeError as e:
+        return {"valid": False, "reason": f"server has no signing secret: {e}"}
+
+    # Constant-time compare on the full scheme+hex string
+    if not hmac.compare_digest(expected, req_body.signature):
+        return {"valid": False, "reason": "signature mismatch"}
+    return {"valid": True}
+
+
+# ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
 def _require_settings() -> Settings:
@@ -556,6 +967,207 @@ def _safe_upload_path(upload_dir: Path, filename: str) -> Path:
 def _request_id(request: Request) -> str:
     """Pull the request id off request.state, defaulting to '-' if absent."""
     return getattr(request.state, "request_id", "-")
+
+
+# ---------------------------------------------------------------------------
+# Async /extract_async helpers
+# ---------------------------------------------------------------------------
+
+
+def _ssrf_check_callback_url(url: str) -> None:
+    """Reject callback URLs that target internal networks.
+
+    Allowed:
+      * ``https://<anywhere>`` — production webhook target.
+      * ``http://localhost`` or ``http://127.0.0.1`` — local dev/loopback
+        for testing the webhook end-to-end without TLS.
+
+    Rejected: anything else on http (attacker-controlled port-forward to
+    an internal service), private/loopback IPs on https (rare; usually
+    misconfigured), and any non-http(s) scheme (file://, gopher://, ...).
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"callback_url scheme {scheme!r} not allowed (must be http/https)",
+        )
+    host = (parsed.hostname or "").lower().strip()
+    if scheme == "http":
+        # Only allow loopback for http (localhost / 127.0.0.1 / ::1).
+        # We don't resolve here — just string-compare, to avoid DNS-rebind
+        # via /etc/hosts. The hostname check is intentionally simple.
+        if host not in ("localhost", "127.0.0.1", "::1"):
+            raise HTTPException(
+                status_code=400,
+                detail="callback_url http:// only allowed for localhost / 127.0.0.1",
+            )
+    else:  # https
+        # Reject if the hostname IS a private/loopback address.
+        import ipaddress
+
+        try:
+            ip = ipaddress.ip_address(host)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"callback_url https target {host!r} resolves to a "
+                           "private/loopback IP",
+                )
+        except ValueError:
+            # Not an IP literal — it's a DNS name. We trust it; production
+            # deployments terminate the public DNS at the ingress.
+            pass
+
+
+def _sign_payload(payload_bytes: bytes, secret: str | None) -> str:
+    """Return ``sha256=<hex>`` HMAC signature for the payload.
+
+    ``secret`` is the per-job callback secret when provided; otherwise we
+    fall back to ``Settings.api_key`` or the env var
+    ``IDP_RESULT_SIGNING_KEY``. The scheme prefix matches what consumers
+    typically expect (Stripe-style ``t=...,v1=...`` simplified to just
+    ``sha256=<hex>``).
+    """
+    if not secret:
+        s = _require_settings()
+        secret = s.api_key or os.environ.get("IDP_RESULT_SIGNING_KEY") or ""
+    if not secret:
+        # No signing material available — refuse rather than emit a weak
+        # signature. Webhooks still fire (callers can ignore unsigned), but
+        # /results/{id}/signed returns 503 because there's nothing to sign.
+        raise RuntimeError(
+            "no signing secret configured (set IDP_API_KEY or "
+            "IDP_RESULT_SIGNING_KEY in the env)"
+        )
+    digest = hmac.new(
+        secret.encode("utf-8"), payload_bytes, hashlib.sha256
+    ).hexdigest()
+    return f"{_SIGNATURE_SCHEME}={digest}"
+
+
+def _post_webhook(url: str, stored: StoredResult, secret: str | None) -> None:
+    """POST a stored result to a callback URL. Best-effort; logs on failure.
+
+    Wire format:
+      - Body: JSON of the stored result (sort_keys=True)
+      - X-IDP-Signature: sha256=<hex> over (timestamp + "." + nonce + "." + body)
+      - X-IDP-Timestamp: unix-epoch-seconds at signature time
+      - X-IDP-Nonce: uuid4 hex (16 chars)
+      - X-IDP-Job-Id: stored.doc_id
+
+    Consumers should verify all three headers together (replay protection):
+      * timestamp must be within IDP_SIGNATURE_MAX_AGE_SECONDS of now()
+      * nonce must not have been seen before (server keeps a bounded LRU)
+      * signature must match HMAC-SHA256 over the canonical bytes
+
+    Failures (timeout, 5xx, connection refused) are logged at WARNING —
+    they do NOT fail the job. Webhook delivery is best-effort; the
+    canonical result is at /results/{id}.
+    """
+    started = time.perf_counter()
+    outcome = "success"
+    try:
+        body_bytes = _json.dumps(
+            _stored_to_wire(stored), sort_keys=True
+        ).encode("utf-8")
+        timestamp = str(int(time.time()))
+        nonce = uuid.uuid4().hex[:16]
+        sig = _sign_payload(
+            timestamp.encode("utf-8") + b"." +
+            nonce.encode("utf-8") + b"." +
+            body_bytes,
+            secret,
+        )
+        with httpx.Client(timeout=10.0) as client:
+            r = client.post(
+                url,
+                content=body_bytes,
+                headers={
+                    "Content-Type": "application/json",
+                    _SIGNATURE_HEADER: sig,
+                    _TIMESTAMP_HEADER: timestamp,
+                    _NONCE_HEADER: nonce,
+                    "X-IDP-Job-Id": stored.doc_id,
+                },
+            )
+            if r.status_code >= 400:
+                _log.warning(
+                    "webhook POST to %s returned %d: %s",
+                    url, r.status_code, r.text[:200],
+                )
+                outcome = "http_error"
+    except Exception as e:  # noqa: BLE001
+        _log.warning("webhook delivery to %s failed: %s", url, e)
+        outcome = "network_error"
+    finally:
+        metrics.inc("async_callbacks_delivered", 1, outcome=outcome)
+        metrics.observe(
+            "async_callback_duration_seconds",
+            time.perf_counter() - started,
+            outcome=outcome,
+        )
+
+
+def _stored_to_wire(stored: StoredResult) -> dict[str, Any]:
+    """Serialize a StoredResult to a JSON-safe dict (id + extraction)."""
+    return {
+        "id": stored.id,
+        "doc_id": stored.doc_id,
+        "schema_name": stored.schema_name,
+        "backend_name": stored.backend_name,
+        "mode": stored.mode,
+        "classification": stored.classification,
+        "extraction": stored.extraction,
+        "confidence": stored.confidence,
+        "validation": stored.validation,
+        "source_path": stored.source_path,
+        "created_at": stored.created_at,
+        "reviewed": stored.reviewed,
+    }
+
+
+def _pipeline_result_to_stored(
+    res: Any, job: Job
+) -> StoredResult:
+    """Convert a PipelineResult into a StoredResult for the store + webhook."""
+    import time as _time
+
+    doc = res.document
+    return StoredResult(
+        id="",  # assigned on put()
+        doc_id=job.id,
+        schema_name=res.schema_name or job.schema_name,
+        backend_name=res.backend_name or job.backend_name,
+        mode=res.mode,
+        classification=res.classification,
+        extraction=doc.extraction or {},
+        confidence=res.confidence,
+        validation=doc.validation,
+        source_path=job.doc_path,
+        created_at=_time.time(),
+    )
+
+
+def _require_job_queue() -> InProcessQueue:
+    if _job_queue is None:
+        raise HTTPException(status_code=503, detail="async: job queue not ready")
+    return _job_queue
+
+
+def _require_results_store() -> InMemoryStorage:
+    if _results_store is None:
+        raise HTTPException(status_code=503, detail="async: results store not ready")
+    return _results_store
 
 
 async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:

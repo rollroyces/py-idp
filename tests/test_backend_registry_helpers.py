@@ -17,7 +17,13 @@ def test_backend_default_repr():
 
 def test_backend_repr_works_for_subclasses():
     """__repr__ is on the ABC, so all subclasses inherit it."""
-    b = OpenAICompatBackend(base_url="http://x", model="m")
+    # The URL is incidental here -- this test only inspects __repr__.
+    # OpenAICompatBackend validates base_url at construction time (SSRF
+    # guard), so point it at localhost and pass the trusted-caller opt-in
+    # rather than using a dummy host that cannot resolve.
+    b = OpenAICompatBackend(
+        base_url="http://localhost:11434/v1", model="m", _allow_private_network=True
+    )
     assert "OpenAICompatBackend" in repr(b)
 
 

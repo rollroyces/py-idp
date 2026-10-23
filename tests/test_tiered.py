@@ -373,8 +373,11 @@ def test_is_multimodal_true_if_either_tier_is_multimodal():
 
     text_only = ControllableBackend()
     # OpenAICompatBackend names itself "openai-compat" and exposes is_multimodal based
-    # on the model name.
-    multimodal = OpenAICompatBackend(base_url="http://localhost:11434/v1", model="gpt-4o")
+    # on the model name. It validates base_url at construction time (SSRF guard),
+    # so use localhost with the trusted-caller opt-in.
+    multimodal = OpenAICompatBackend(
+        base_url="http://localhost:11434/v1", model="gpt-4o", _allow_private_network=True
+    )
     t1 = TieredBackend(cheap=text_only, expensive=multimodal)
     assert t1.is_multimodal is True
 
