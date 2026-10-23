@@ -188,11 +188,13 @@ async def lifespan(app: FastAPI):
     _upload_dir = Path(os.environ.get("IDP_UPLOAD_DIR", "/tmp/idp-uploads"))
     _upload_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load templates from the configured directory. Empty/missing
-    # directory = empty registry (server starts; /templates returns []).
+    # Load templates from the configured directory, falling back to the
+    # copies bundled inside the installed package. Before v0.6.1 an
+    # installed user got an empty registry here because the sample
+    # templates lived only at the repo root and were never packaged.
     template_dir = Path(_settings.template_dir)
     try:
-        _template_registry = TemplateRegistry.load(
+        _template_registry = TemplateRegistry.load_with_fallback(
             template_dir, watch=_settings.template_reload
         )
     except Exception as e:
@@ -202,7 +204,11 @@ async def lifespan(app: FastAPI):
         if isinstance(e, IDPError):
             raise
         raise ConfigurationError(f"template load failed: {e}") from e
-    _log.info("loaded %d template(s) from %s", len(_template_registry), template_dir)
+    _log.info(
+        "loaded %d template(s) from %s",
+        len(_template_registry),
+        template_dir if len(_template_registry) else "(bundled defaults)",
+    )
 
     yield
 

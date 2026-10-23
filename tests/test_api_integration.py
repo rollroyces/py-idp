@@ -435,14 +435,18 @@ def test_list_templates_returns_all_registered(tmp_path, monkeypatch):
         api_mod._template_registry = saved_registry
 
 
-def test_list_templates_empty_registry_returns_empty(monkeypatch):
-    """With no templates/ dir available, /templates returns [].
+def test_list_templates_empty_dir_falls_back_to_bundled(monkeypatch):
+    """With IDP_TEMPLATE_DIR pointing at a dir with no .md files, /templates
+    serves the templates bundled inside the installed package.
 
-    Note: This is hard to test in-process because the lifespan
-    handler always reads from the configured templates/ directory
-    on startup. We approximate by setting an invalid template dir
-    via env var, which causes Settings.load() to point at a
-    non-existent path — the lifespan then loads zero templates.
+    Behavior change in v0.6.1: previously an empty/missing template dir
+    produced an empty registry, which meant `pip install py-idp` users got
+    nothing (the sample templates lived at the repo root and were never
+    packaged). `TemplateRegistry.load_with_fallback` now falls back to the
+    copies shipped under `idp/templates_pkg/`.
+
+    The server still starts cleanly either way -- the point of this test is
+    that a template dir problem never breaks startup.
     """
     import tempfile
 
@@ -451,7 +455,6 @@ def test_list_templates_empty_registry_returns_empty(monkeypatch):
     from idp import api as api_mod
     from idp.config import Settings
 
-    # Create an empty temp dir (no .md files)
     with tempfile.TemporaryDirectory() as empty_dir:
         monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
         monkeypatch.setenv("IDP_TEMPLATE_DIR", empty_dir)
@@ -462,6 +465,39 @@ def test_list_templates_empty_registry_returns_empty(monkeypatch):
             with TestClient(api_mod.app) as client:
                 r = client.get("/templates")
                 assert r.status_code == 200
-                assert r.json() == []
+                names = {row["name"] for row in r.json()}
+                # Bundled defaults are now served.
+                assert {"invoice", "contract"} <= names
+        finally:
+            api_mod._settings = saved_settings
+
+
+def test_list_templates_uses_user_dir_when_populated(monkeypatch, tmp_path):
+    """A template dir with .md files wins over the bundled defaults."""
+    import tempfile
+
+    from fastapi.testclient import TestClient
+
+    from idp import api as api_mod
+    from idp.config import Settings
+
+    user_dir = tmp_path / "user-templates"
+    user_dir.mkdir()
+    (user_dir / "my_doc.md").write_text(
+        "---\nname: my_doc\nschema: Invoice\nversion: 1\n---\n\n# My Doc\n",
+        encoding="utf-8",
+    )
+
+    with tempfile.TemporaryDirectory():
+        monkeypatch.setenv("IDP_API_KEY_REQUIRED", "0")
+        monkeypatch.setenv("IDP_TEMPLATE_DIR", str(user_dir))
+        saved_settings = api_mod._settings
+        api_mod._settings = None
+        try:
+            api_mod._settings = Settings.load()
+            with TestClient(api_mod.app) as client:
+                r = client.get("/templates")
+                assert r.status_code == 200
+                assert [row["name"] for row in r.json()] == ["my_doc"]
         finally:
             api_mod._settings = saved_settings
