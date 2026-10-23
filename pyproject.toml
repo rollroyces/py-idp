@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-idp"
-version = "0.6.1"
+version = "0.6.2"
 description = "General-purpose, AI-enabled Intelligent Document Processing framework for Python. OCR + multimodal extraction with Pydantic schemas, confidence assessment, HITL review, and a built-in eval harness. Supports OpenAI, Anthropic, Ollama, and 8 China LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,9 +45,20 @@ dependencies = [
     "streamlit>=1.32",
     "pdfplumber>=0.10",        # lightweight fallback parser
     "tiktoken>=0.7",           # token-budget chunking (chunker.TokenChunker, extract optimizer)
+    # Template frontmatter is YAML, and the bundled sample templates now
+    # load automatically (TemplateRegistry.load_with_fallback), so a
+    # default install must be able to parse them. Before v0.6.2 PyYAML was
+    # optional and only needed by users who pointed at their own
+    # templates/ dir -- which meant the shipped samples raised ImportError.
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
+# PyYAML is a core dependency as of v0.6.2 (the bundled sample templates
+# load by default). This extra is retained as an explicit no-op so the
+# error message in idp.templates and any existing install instructions
+# that say `pip install py-idp[templates]` keep working.
+templates = ["PyYAML>=6.0"]
 # Default parser (IBM Docling). Heavy: ~500MB model deps.
 docling = ["docling>=2.0"]
 # Optional OCR fallback for noisy scans
