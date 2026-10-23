@@ -66,17 +66,39 @@ def test_dockerfile_digest_is_64_hex_chars():
         assert re.fullmatch(r"[0-9a-f]{64}", d), f"Non-hex chars in digest: {d!r}"
 
 
+def _directive_blocks(body: str) -> list[str]:
+    """Split a Dockerfile into top-level directive blocks.
+
+    A block is one directive plus its indented continuation lines. This
+    lets a test reason about a single ``RUN`` instead of the whole file.
+    """
+    blocks: list[str] = []
+    current: list[str] = []
+    for raw in body.splitlines():
+        if raw.strip() and not raw[:1].isspace():
+            if current:
+                blocks.append("\n".join(current))
+            current = [raw]
+        elif current:
+            current.append(raw)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
 def test_dockerfile_installs_tini():
     """The runtime stage must install tini."""
     body = _read()
-    # The Dockerfile uses a multi-line RUN, so we look for both "apt-get
-    # install" and the tini package line within the same RUN block.
-    # Match: an "apt-get install" line, followed by anything (including
-    # newlines) up to a tini=version line.
-    assert re.search(
-        r"apt-get install[^\n]*(?:\n\s+[^\n]*)*?\btini=\S+",
-        body,
-    ), "Dockerfile does not install tini via apt-get"
+    # "apt-get install" and the tini= package line must live in the SAME
+    # RUN block: the Dockerfile has an earlier build-deps RUN (gcc) that
+    # must not satisfy this check. We walk directive blocks instead of
+    # matching with one cross-line regex, because a nested repetition
+    # over newlines is a ReDoS hazard (CodeQL flags it as an
+    # "Inefficient regular expression" / exponential-backtracking risk).
+    for block in _directive_blocks(body):
+        if "apt-get install" in block and re.search(r"\btini=\S+", block):
+            return
+    raise AssertionError("Dockerfile does not install tini via apt-get")
 
 
 def test_dockerfile_cmd_uses_tini_as_pid_1():
