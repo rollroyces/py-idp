@@ -5,6 +5,48 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.6.1] — 2026-10-23 — ship the bundled document templates
+
+Packaging fix. No API changes.
+
+### Fixed
+
+* **Sample templates never shipped in the package.** The `.md` templates
+  lived at the repo root in `templates/`, outside `src/`, so
+  `[tool.setuptools.packages.find] where = ["src"]` never picked them
+  up. Verified against the actual artifacts: **0 template files** in
+  the v0.6.0 wheel and sdist, and the same for every prior release back
+  to at least v0.3.1. Anyone who ran `pip install py-idp` and pointed
+  the server at the default `./templates` got an **empty
+  `TemplateRegistry`**, despite the README advertising sample templates
+  for `invoice` / `contract` / `bank_statement` (and, since v0.5,
+  `w2` / `id_card` / `medical_claim`).
+
+  The templates now live in `src/idp/templates_pkg/` and are declared as
+  package data, so they are present in both the wheel and the sdist.
+  `TemplateRegistry.load_with_fallback()` prefers a user-supplied
+  directory when it holds `.md` files and otherwise falls back to the
+  packaged set; `api.py` startup uses it, so the server gets a working
+  registry out of the box.
+
+  `bundled_template_dir()` resolves the packaged copy via
+  `importlib.resources` and returns `None` on older Python or zip-safe
+  loaders rather than raising.
+
+### Added
+
+* `tests/test_template_packaging.py` — 10 tests, including two that
+  inspect the **built wheel and sdist** to assert all six `.md` files are
+  present. That is the assertion which would have caught the bug.
+
+### Changed
+
+* `IDP_TEMPLATE_DIR` pointing at an empty or missing directory now
+  serves the bundled defaults instead of nothing. A populated user
+  directory still wins outright. Call `TemplateRegistry.load()`
+  directly (rather than `load_with_fallback()`) if you want a strictly
+  empty registry.
+
 ## [0.6.0] — 2026-10-23 — Unlimited-OCR backend
 
 Adds `baidu/Unlimited-OCR` (Baidu, arXiv 2606.23050) as a parallel
