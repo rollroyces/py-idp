@@ -229,6 +229,32 @@ def load_template(path: Path) -> Template:
     )
 
 
+def bundled_template_dir() -> Path | None:
+    """Return the directory holding the templates that ship inside the wheel.
+
+    The sample templates live in ``src/idp/templates_pkg/`` and are
+    declared as package data in ``pyproject.toml``, so they are present
+    after ``pip install py-idp``. Returns ``None`` when running from a
+    source checkout that predates the packaging fix (or from a zipped
+    egg where ``importlib.resources`` cannot materialise a path).
+
+    Use :meth:`TemplateRegistry.load_with_fallback` to prefer a
+    user-supplied directory and fall back to these.
+    """
+    try:
+        from importlib.resources import files
+    except ImportError:  # pragma: no cover - Python < 3.9
+        return None
+    try:
+        res = files("idp.templates_pkg")
+    except (ModuleNotFoundError, TypeError):
+        return None
+    try:
+        return Path(str(res))
+    except TypeError:  # pragma: no cover - zip-safe loader
+        return None
+
+
 class TemplateRegistry:
     """In-memory registry of templates loaded from a directory.
 
@@ -279,6 +305,39 @@ class TemplateRegistry:
                 )
             templates[t.name] = t
         return cls(templates, watch=watch)
+
+    @classmethod
+    def load_with_fallback(
+        cls,
+        directory: Path | str | None = None,
+        *,
+        watch: bool = False,
+    ) -> TemplateRegistry:
+        """Load user templates from ``directory``, else the bundled set.
+
+        This is what the FastAPI server and ``Pipeline`` should call.
+        Before this existed, an installed user who ran
+        ``pip install py-idp`` and pointed the server at the default
+        ``./templates`` got an **empty** registry, because the sample
+        templates lived at the repo root and were never packaged. They
+        now ship inside the wheel under ``idp/templates_pkg/``.
+
+        Precedence:
+
+        1. ``directory`` when it is a non-empty directory
+        2. the templates bundled in the installed package
+        3. an empty registry
+        """
+        if directory is not None:
+            d = Path(directory)
+            if d.is_dir() and any(d.glob("*.md")):
+                return cls.load(d, watch=watch)
+
+        bundled = bundled_template_dir()
+        if bundled is not None and bundled.is_dir() and any(bundled.glob("*.md")):
+            return cls.load(bundled, watch=watch)
+
+        return cls({}, watch=watch)
 
     # ------------------------------------------------------------------
     # Lookup
@@ -373,5 +432,6 @@ __all__ = [
     "OPTIONAL_KEYS",
     "Template",
     "TemplateRegistry",
+    "bundled_template_dir",
     "load_template",
 ]

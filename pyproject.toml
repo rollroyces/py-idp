@@ -124,6 +124,18 @@ Changelog = "https://github.com/rollroyces/py-idp/blob/main/CHANGELOG.md"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Ship the bundled sample templates inside the package so
+# `pip install py-idp` actually gets them. Without this they live only
+# at the repo root (outside src/) and are absent from both the wheel
+# and the sdist, leaving every installed user with an empty
+# TemplateRegistry. `idp.templates` resolves the packaged copies at
+# `importlib.resources` when no IDP_TEMPLATE_DIR / ./templates is set.
+[tool.setuptools.package-data]
+"idp.templates_pkg" = ["*.md"]
+
+[tool.setuptools]
+include-package-data = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
