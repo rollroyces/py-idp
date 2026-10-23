@@ -261,7 +261,12 @@ def _validate_field_safety(
     alongside schema validation, not as a replacement.
     """
     warnings: list[str] = []
-    if not isinstance(extracted, dict):
+    # Runtime guard: both call sites pass a dict today, but this scanner is
+    # security-relevant, so never assume the shape. The parameter is
+    # annotated ``dict[str, Any]``, which lets mypy prove the isinstance
+    # branch unreachable -- so route the check through an Any-typed local.
+    payload: Any = extracted
+    if not isinstance(payload, dict):
         return warnings
     # Build a set of field names the schema knows about so we don't flag
     # internal markers like ``_chunk_count``, ``_parse_failed``, etc.
