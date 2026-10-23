@@ -39,6 +39,8 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import urlparse
 
+from idp.errors import BackendUnavailableError, TimeoutError_
+
 # ---------------------------------------------------------------------------
 # SSRF guard — base_url validation for OpenAICompatBackend
 # ---------------------------------------------------------------------------
@@ -145,7 +147,6 @@ def _validate_base_url(
                 )
     return url
 
-from idp.errors import BackendUnavailableError, TimeoutError_, safe_call
 
 _log = logging.getLogger(__name__)
 
@@ -518,7 +519,6 @@ class AnthropicBackend(Backend):
         try:
             resp = client.messages.create(**kwargs)  # type: ignore[union-attr]
         except Exception as e:  # anthropic SDK raises its own hierarchy
-            name = type(e).__name__
             msg = str(e).lower()
             status = getattr(e, "status_code", None)
             # Anthropic SDK raises anthropic.APIStatusError for HTTP errors.

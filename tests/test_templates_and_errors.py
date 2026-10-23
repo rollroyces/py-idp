@@ -488,10 +488,12 @@ def test_request_id_echoed_when_provided(client_with_templates) -> None:
 def test_404_returns_error_envelope(client_with_templates) -> None:
     r = client_with_templates.get("/nonexistent")
     assert r.status_code == 404
-    # FastAPI default 404 is a {"detail": "Not Found"} shape — we don't
-    # wrap that in our envelope (only IDPError subtypes get the
-    # envelope). This test documents that contract.
-    assert "detail" in r.json()
+    # Every API error -- including routing 404s -- now uses the project
+    # envelope (see USER_ERRORS.md), not FastAPI's {"detail": ...}.
+    body = r.json()
+    assert body["error"]["code"] == "IDP-CLIENT-404"
+    assert body["error"]["message"] == "Not Found"
+    assert body["error"]["hint"]
 
 
 # -----------------------------------------------------------------------

@@ -41,11 +41,11 @@ from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from idp import __version__
 from idp._logging import configure, get_logger
@@ -60,7 +60,6 @@ from idp.errors import (
     TimeoutError_,
     classify_status,
     error_envelope,
-    format_error,
 )
 from idp.metrics import metrics
 from idp.pipeline.pipeline import Pipeline
@@ -1278,7 +1277,11 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     # Preserve the original ``detail`` message when possible.
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     env_exc = IDPError(detail)
-    env_exc.code = code  # type: ignore[assignment]
+    # Set the code on the instance before building the envelope: the
+    # envelope picks the user-facing hint and docs link from it. mypy
+    # reports [misc] here (assigning to a ClassVar via an instance), so
+    # that is the error code the ignore has to cover.
+    env_exc.code = code  # type: ignore[misc]
     env = error_envelope(env_exc, request_id=_request_id(request))
     return JSONResponse(status_code=exc.status_code, content=env, headers=exc.headers or {})
 
@@ -1292,7 +1295,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     or an unstructured string. Re-raises ``HTTPException`` so its
     handler can run (FastAPI routes them through here otherwise).
     """
-    if isinstance(exc, (HTTPException, StarletteHTTPException)):
+    if isinstance(exc, HTTPException | StarletteHTTPException):
         # FastAPI will route HTTPException through this handler before its
         # own; let Starlette's built-in handler handle it.
         raise exc
@@ -1302,8 +1305,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
     # Build a stable envelope. Message is generic -- the real traceback
     # is in the logs.
+    # IDPError.code already defaults to "IDP-INT-001".
     env_exc = IDPError("internal server error")
-    env_exc.code = "IDP-INT-001"  # type: ignore[assignment]
     return JSONResponse(
         status_code=500,
         content=error_envelope(env_exc, request_id=_request_id(request)),

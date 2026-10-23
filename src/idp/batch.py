@@ -26,7 +26,6 @@ backward compatibility.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -36,9 +35,8 @@ from typing import Any
 from idp._logging import get_logger
 from idp.checkpoint import CheckpointEntry, CheckpointStore
 from idp.core.document import Document
+from idp.errors import format_error
 from idp.llm.backend import Backend
-
-from idp.errors import IDPError, format_error, is_transient
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
 _log = get_logger(__name__)
@@ -339,7 +337,7 @@ async def process_batch_async(
                 try:
                     on_progress(done, len(paths))
                 except Exception:  # noqa: BLE001
-                    log.exception("on_progress callback raised (ignored)")
+                    _log.exception("on_progress callback raised (ignored)")
 
     await asyncio.gather(*[_one(i, p) for i, p in enumerate(paths)])
     return results  # type: ignore[return-value]

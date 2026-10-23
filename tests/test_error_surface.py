@@ -262,18 +262,16 @@ def test_wrap_returns_value_on_success():
 # safe_call()
 # ---------------------------------------------------------------------------
 def test_safe_call_converts_foreign_exception():
-    with pytest.raises(BackendUnavailableError) as ei:
-        with safe_call("extract_chunk"):
-            raise ValueError("kaboom")
+    with pytest.raises(BackendUnavailableError) as ei, safe_call("extract_chunk"):
+        raise ValueError("kaboom")
     assert "extract_chunk" in str(ei.value)
     assert isinstance(ei.value.__cause__, ValueError)
 
 
 def test_safe_call_passes_idp_errors_through():
     original = DocumentParseError("cannot parse")
-    with pytest.raises(DocumentParseError) as ei:
-        with safe_call("extract_chunk"):
-            raise original
+    with pytest.raises(DocumentParseError) as ei, safe_call("extract_chunk"):
+        raise original
     assert ei.value is original
 
 
@@ -290,9 +288,8 @@ def test_safe_call_can_swallow_when_reraise_false():
 
 
 def test_safe_call_uses_custom_default():
-    with pytest.raises(OCRError):
-        with safe_call("ocr", default=OCRError):
-            raise ValueError("kaboom")
+    with pytest.raises(OCRError), safe_call("ocr", default=OCRError):
+        raise ValueError("kaboom")
 
 
 # ---------------------------------------------------------------------------

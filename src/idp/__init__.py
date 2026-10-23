@@ -28,10 +28,10 @@ from idp.console import pretty_print_result
 from idp.core.document import Block, Document, Page
 from idp.discover import DiscoveryResult, discover_schema
 from idp.errors import (
+    FileTooLargeError,
     IDPError,
     OCRError,
     TimeoutError_,
-    FileTooLargeError,
     classify_status,
     docs_url_for,
     error_envelope,

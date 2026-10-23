@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import functools
 import logging
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Callable, ClassVar, Iterator, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 _log = logging.getLogger(__name__)
 
@@ -245,13 +246,13 @@ def is_transient(exc: BaseException) -> bool:
     the exception, we say it IS transient (the caller can decide).
     """
     # Non-transient py-idp errors: retrying them just delays the failure.
-    if isinstance(exc, (ConfigurationError, SchemaValidationError,
-                        TemplateNotFoundError, FileTooLargeError,
-                        TemplateParseError)):
+    if isinstance(exc, ConfigurationError | SchemaValidationError
+                  | TemplateNotFoundError | FileTooLargeError
+                  | TemplateParseError):
         return False
 
     # Built-in transient types
-    if isinstance(exc, (ConnectionError, TimeoutError)):
+    if isinstance(exc, ConnectionError | TimeoutError):
         return True
     if isinstance(exc, OSError):
         # OSError covers a wide family (ConnectionRefusedError,
