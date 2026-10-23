@@ -111,7 +111,7 @@ def test_get_job_status_returns_submitted_job(async_client, sample_doc):
 def test_get_job_status_unknown_returns_404(async_client):
     r = async_client.get("/jobs/does-not-exist")
     assert r.status_code == 404
-    assert "unknown job_id" in r.json()["detail"]
+    assert "unknown job_id" in r.json()["error"]["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ def test_callback_url_must_be_https_or_localhost(async_client, sample_doc):
         data={"schema_name": "Invoice", "callback_url": "http://10.0.0.1:9000/cb"},
     )
     assert r.status_code == 400
-    assert "callback_url" in r.json()["detail"]
+    assert "callback_url" in r.json()["error"]["message"]
 
 
 def test_callback_url_rejects_non_http_scheme(async_client, sample_doc):
@@ -313,7 +313,8 @@ def test_callback_url_https_private_ip_rejected(async_client, sample_doc):
         },
     )
     assert r.status_code == 400
-    assert "private" in r.json()["detail"].lower() or "loopback" in r.json()["detail"].lower()
+    message = r.json()["error"]["message"].lower()
+    assert "private" in message or "loopback" in message
 
 
 # ---------------------------------------------------------------------------

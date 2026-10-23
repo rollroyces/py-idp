@@ -5,6 +5,44 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [Unreleased] — user-facing errors, retries, and FastAPI handlers
+
+### Added
+
+* **Structured error envelope for every API error.** New `idp.errors` module
+  provides a typed hierarchy (`IDPError` and subclasses), `error_envelope()`,
+  `format_error()`, `classify_status()`, `is_transient()`, a `wrap()`
+  decorator and a `safe_call()` context manager. Each error carries a stable
+  machine-readable `code`, a `request_id`, a user-facing `hint` and a
+  `docs_url` anchor. See `USER_ERRORS.md` for the full catalog.
+* **Typed exceptions from the LLM backends.** Backend failures now raise
+  `BackendUnavailableError` / `TimeoutError_` instead of leaking raw
+  `httpx` exceptions, with the original error preserved in `__cause__`.
+* **`BatchItemResult.error_code` and `.transient`**, so batch callers can
+  route failures without parsing message strings.
+* **`tests/test_error_surface.py`** covering the classification helpers, the
+  envelope builders, the wrappers, the FastAPI exception handlers and two
+  end-to-end checks of the envelope shape.
+
+### Changed
+
+* **BREAKING (API): error responses no longer use FastAPI's `{"detail": ...}`
+  shape.** Every error now returns `{"error": {"code", "message", "type",
+  "request_id", "hint", "docs_url"}}`. Clients that read `body["detail"]`
+  must switch to `body["error"]["message"]` (or switch on
+  `body["error"]["code"]`). This includes routing 404s and HTTP exceptions,
+  which previously returned FastAPI's default body.
+
+### Fixed
+
+* `idp.errors` no longer binds the name `TimeoutError` at module level. The
+  alias shadowed the builtin for the whole module, so `is_transient()` was
+  testing against the py-idp error instead of the real `TimeoutError`, and a
+  plain `TimeoutError("timed out")` was classified as non-transient and
+  never retried.
+* `src/idp/batch.py` called an undefined `log` in six places (the module
+  logger is `_log`), raising `NameError` on every error path.
+
 ## [0.6.2] — 2026-10-23 — PyYAML is now a core dependency
 
 Packaging follow-up. No API changes.

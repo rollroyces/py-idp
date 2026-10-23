@@ -26,19 +26,20 @@ backward compatibility.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from idp._logging import get_logger
 from idp.checkpoint import CheckpointEntry, CheckpointStore
 from idp.core.document import Document
+from idp.errors import format_error
 from idp.llm.backend import Backend
 from idp.pipeline.pipeline import Pipeline, PipelineResult
 
-log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 @dataclass
@@ -53,10 +54,17 @@ class BatchItemResult:
     helper. Existing sync callers that construct ``BatchItemResult``
     without these fields get the default ``success=True`` /
     ``latency_s=0.0``, which is reconciled in :meth:`__post_init__`.
+
+    ``error_code`` carries the py-idp machine-readable code
+    (``"IDP-PARSE-001"`` etc.) when the failure was an :class:`IDPError`,
+    so callers can route errors without parsing strings. ``transient``
+    indicates whether retrying the same path is likely to succeed.
     """
     path: str
     result: PipelineResult | None = None
     error: str | None = None
+    error_code: str | None = None
+    transient: bool = False
     elapsed_seconds: float = 0.0
     # Async-batch convenience fields. ``success`` mirrors ``ok`` (i.e.
     # ``error is None``) and ``latency_s`` mirrors ``elapsed_seconds``.
@@ -86,6 +94,11 @@ class BatchItemResult:
             "ok": self.ok,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }
+        if not self.ok:
+            d["error"] = self.error
+            if self.error_code is not None:
+                d["error_code"] = self.error_code
+            d["transient"] = self.transient
         if self.ok and self.result is not None:
             d["doc_id"] = self.result.document.doc_id
             d["schema"] = self.result.schema_name
@@ -181,7 +194,7 @@ def process_batch(
             if r.ok:
                 write_to_delta(r.to_dict())
             else:
-                log.error(f"Failed: {r.path}: {r.error}")
+                _log.error(f"Failed: {r.path}: {r.error}")
     """
     # Resolve checkpoint store (lazy construction from string or Path)
     cp: CheckpointStore | None = None
@@ -190,7 +203,7 @@ def process_batch(
         if archive_at_start:
             archived = cp.archive()
             if archived is not None:
-                log.info(
+                _log.info(
                     "checkpoint: archived previous run to %s; starting fresh",
                     archived,
                 )
@@ -205,7 +218,7 @@ def process_batch(
     for i, path in enumerate(paths_iter, start=1):
         # Idempotent resume: skip paths already in the checkpoint.
         if cp is not None and path in cp:
-            log.info("checkpoint: skipping already-done path %s", path)
+            _log.info("checkpoint: skipping already-done path %s", path)
             continue
         t0 = time.perf_counter()
         try:
@@ -217,10 +230,17 @@ def process_batch(
                 elapsed_seconds=time.perf_counter() - t0,
             )
         except Exception as e:
-            log.warning("Failed to process %s: %s", path, e)
+            structured = format_error(e)
+            transient = bool(structured.get("is_transient"))
+            _log.warning(
+                "batch: failed to process %s: %s (%s)",
+                path, e, structured.get("code", "?"),
+            )
             item = BatchItemResult(
                 path=str(path),
                 error=f"{type(e).__name__}: {e}",
+                error_code=structured.get("code"),
+                transient=transient,
                 elapsed_seconds=time.perf_counter() - t0,
             )
         # Record the outcome BEFORE yielding so a crash between
@@ -243,15 +263,15 @@ def process_batch(
                 # Don't let a checkpoint write failure kill the batch —
                 # the user can always retry; the only cost is reprocessing
                 # the docs that didn't get recorded.
-                log.warning("checkpoint: failed to record %s: %s", item.path, e)
+                _log.warning("checkpoint: failed to record %s: %s", item.path, e)
         if progress_every and i % progress_every == 0 and total:
-            log.info("Batch progress: %d / %d (%.1f%%)",
+            _log.info("Batch progress: %d / %d (%.1f%%)",
                      i, total, 100 * i / total)
         if on_progress is not None:
             try:
                 on_progress(i, total or -1, item)
             except Exception:
-                log.exception("on_progress callback raised (ignored)")
+                _log.exception("on_progress callback raised (ignored)")
         yield item
 
 
@@ -317,7 +337,7 @@ async def process_batch_async(
                 try:
                     on_progress(done, len(paths))
                 except Exception:  # noqa: BLE001
-                    log.exception("on_progress callback raised (ignored)")
+                    _log.exception("on_progress callback raised (ignored)")
 
     await asyncio.gather(*[_one(i, p) for i, p in enumerate(paths)])
     return results  # type: ignore[return-value]

@@ -35,6 +35,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from idp.errors import BackendUnavailableError
 from idp.llm.backend import CompletionRequest, Message
 from idp.llm.ollama import (
     DEFAULT_BASE_URL,
@@ -188,19 +189,24 @@ def test_parses_ollama_response_handles_empty_content():
 # 3. raises-on-http-error
 # ---------------------------------------------------------------------------
 def test_raises_on_http_error():
-    """A 5xx from Ollama surfaces as httpx.HTTPStatusError."""
+    """A 5xx from Ollama surfaces as a typed IDP backend error."""
     backend, _rec, patched, _ = _make_backend_and_recorder(status_code=500)
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BackendUnavailableError) as ei:
         _patched_complete(backend, patched, json_mode=False)
+    # The original httpx error stays in the __cause__ chain.
+    assert isinstance(ei.value.__cause__, httpx.HTTPStatusError)
+    assert "500" in str(ei.value)
 
 
 def test_raises_on_404():
     """A 404 (model not found) also raises; we do not silently fall back."""
     backend, _rec, patched, _ = _make_backend_and_recorder(status_code=404)
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BackendUnavailableError) as ei:
         _patched_complete(backend, patched, json_mode=False)
+    assert isinstance(ei.value.__cause__, httpx.HTTPStatusError)
+    assert "404" in str(ei.value)
 
 
 # ---------------------------------------------------------------------------

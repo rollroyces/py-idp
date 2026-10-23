@@ -108,7 +108,10 @@ def test_extract_requires_api_key(client):
     r = client.post("/extract", files={"file": ("x.txt", b"hello")},
                     data={"schema_name": "Invoice"})
     assert r.status_code == 401
-    assert "API key" in r.json()["detail"]
+    # Every API error now uses the project envelope (see USER_ERRORS.md).
+    body = r.json()
+    assert body["error"]["code"] == "IDP-CLIENT-401"
+    assert "API key" in body["error"]["message"]
 
 
 def test_extract_with_correct_key_passes_auth(client, sample_doc):
@@ -181,7 +184,7 @@ def test_upload_size_limit_enforced(tmp_path, monkeypatch):
         r = c.post("/extract", files=files, data={"schema_name": "Invoice"},
                    headers={"X-API-Key": "k"})
         assert r.status_code == 413
-        assert "too large" in r.json()["detail"]
+        assert "too large" in r.json()["error"]["message"]
 
 
 def test_upload_size_limit_accepts_small_payload(tmp_path, monkeypatch, sample_doc):
