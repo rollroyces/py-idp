@@ -140,6 +140,36 @@ def test_is_private_ip_classifier():
     assert _is_private_ip(ipaddress.ip_address("0.0.0.0"))
 
 
+def test_is_private_ip_handles_ipv6_addresses():
+    """Non-loopback IPv6 must not crash the classifier.
+
+    Regression: the classifier used to evaluate ``ip.sixtofour[0]`` for
+    every IPv6 address. ``sixtofour`` returns None unless the address is
+    actually a 6to4 address, and IPv4Address is not subscriptable, so
+    any IPv6 address that was not 6to4 raised TypeError. CI runners
+    resolve api.openai.com to IPv6 first, so this broke every test that
+    constructed a backend against a public host.
+    """
+    import ipaddress
+
+    # Public IPv6 -- must be classified without raising.
+    assert not _is_private_ip(ipaddress.ip_address("2001:4860:4860::8888"))
+    # Unique-local (fc00::/7)
+    assert _is_private_ip(ipaddress.ip_address("fd00::1"))
+    # Link-local (fe80::/10)
+    assert _is_private_ip(ipaddress.ip_address("fe80::1"))
+    # Unspecified
+    assert _is_private_ip(ipaddress.ip_address("::"))
+    # IPv4-mapped private address (::ffff:10.0.0.1) -> private IPv4
+    assert _is_private_ip(ipaddress.ip_address("::ffff:10.0.0.1"))
+    # IPv4-mapped public address (::ffff:8.8.8.8) -> public IPv4
+    assert not _is_private_ip(ipaddress.ip_address("::ffff:8.8.8.8"))
+    # 6to4 (2002::/16): the stdlib flags the whole range as private, so both
+    # the private and the public wrapping are rejected.
+    assert _is_private_ip(ipaddress.ip_address("2002:0a00:0001::"))
+    assert _is_private_ip(ipaddress.ip_address("2002:0808:0808::"))
+
+
 # ---------------------------------------------------------------------------
 # OpenAICompatBackend constructor
 # ---------------------------------------------------------------------------

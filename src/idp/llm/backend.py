@@ -56,20 +56,26 @@ _ALLOW_PRIVATE_NETWORK = os.environ.get("IDP_ALLOW_PRIVATE_NETWORK") == "1"
 def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """True if the address is loopback, link-local, private, or reserved.
 
-    Catches IPv4-mapped IPv6 (::ffff:10.0.0.1) by checking both families.
+    Catches IPv4-mapped IPv6 (::ffff:10.0.0.1) and 6to4 (2002::/16)
+    wrappers around an IPv4 address.
     """
-    return (
+    if (
         ip.is_loopback
         or ip.is_link_local
         or ip.is_private
         or ip.is_reserved
         or ip.is_unspecified
-        # 169.254.x.x (AWS / Azure metadata) is link-local in the stdlib's
-        # is_link_local flag for IPv4; IPv6 equivalent is fe80::/10. Both
-        # are covered above. We additionally explicitly block the IPv6
-        # unique-local prefix fc00::/7 for paranoia.
-        or (ip.version == 6 and ip.sixtofour[0] != "::")  # type: ignore[index]
-    )
+    ):
+        return True
+    if ip.version == 6:
+        # IPv4-mapped (::ffff:0:0/96) and 6to4 (2002::/16) addresses embed an
+        # IPv4 address. Both properties return None when the address is not
+        # of that form, and IPv4Address is not subscriptable -- so the
+        # embedded address has to be compared as a value, never indexed.
+        for embedded in (ip.sixtofour, ip.ipv4_mapped):
+            if embedded is not None and _is_private_ip(embedded):
+                return True
+    return False
 
 
 def _validate_base_url(
