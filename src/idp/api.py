@@ -25,8 +25,10 @@ multi-tenant auth (these are deployment-level concerns).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
+import json as _json  # local alias to avoid shadowing issues elsewhere
 import os
 import re
 import threading
@@ -56,7 +58,7 @@ from idp.errors import (
 )
 from idp.metrics import metrics
 from idp.pipeline.pipeline import Pipeline
-from idp.queue.jobs import InProcessQueue, Job, JobStatus
+from idp.queue.jobs import InProcessQueue, Job
 from idp.ratelimit import RateLimiter
 from idp.storage.store import InMemoryStorage, StoredResult
 from idp.templates import TemplateRegistry
@@ -81,7 +83,7 @@ _NONCE_HEADER = "X-IDP-Nonce"
 # Bounded LRU cache of nonces we've seen on /verify_signature. Acts as
 # a single-shot blacklist — replay protection. The OrderedDict lets
 # us pop the oldest entry when we exceed the configured maxsize.
-_nonce_cache: "OrderedDict[str, None]" = OrderedDict()
+_nonce_cache: OrderedDict[str, None] = OrderedDict()
 _nonce_lock = threading.Lock()
 
 
@@ -361,10 +363,8 @@ async def lifespan(app: FastAPI):
     # Shutdown: clean up, log final metrics
     _log.info("py-idp API shutting down. metrics: %s", metrics.snapshot())
     _gauge_task.cancel()
-    try:
+    with contextlib.suppress(_asyncio.CancelledError):
         await _gauge_task
-    except _asyncio.CancelledError:
-        pass
     if _job_queue is not None:
         await _job_queue.stop()
     _settings = None
@@ -808,7 +808,7 @@ async def get_signed_result(result_id: str) -> JSONResponse:
             secret=None,
         )
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
     return JSONResponse(
         content={"result": wire, "signature": sig,
                  "timestamp": timestamp, "nonce": nonce},
@@ -972,7 +972,6 @@ def _request_id(request: Request) -> str:
 # ---------------------------------------------------------------------------
 # Async /extract_async helpers
 # ---------------------------------------------------------------------------
-import json as _json  # local alias to avoid shadowing issues elsewhere
 
 
 def _ssrf_check_callback_url(url: str) -> None:

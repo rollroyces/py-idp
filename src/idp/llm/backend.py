@@ -38,7 +38,6 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import urlparse
 
-
 # ---------------------------------------------------------------------------
 # SSRF guard — base_url validation for OpenAICompatBackend
 # ---------------------------------------------------------------------------

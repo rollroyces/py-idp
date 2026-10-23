@@ -14,10 +14,7 @@ import hashlib
 import hmac
 import json
 import time
-from pathlib import Path
 from typing import Any
-
-import pytest
 
 
 # =============================================================================
@@ -39,6 +36,7 @@ def test_extract_async_submission_rate_limit_429(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -75,6 +73,7 @@ def test_extract_async_rate_limit_zero_disables(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -101,8 +100,9 @@ def test_extract_async_concurrency_cap(monkeypatch, tmp_path):
     With max_concurrent=2 and a runner that records the max concurrent
     it saw, submitting 5 jobs in a tight loop must observe exactly 2.
     """
-    import threading
     import asyncio
+    import threading
+
     from idp.queue.jobs import InProcessQueue, Job, JobStatus
 
     seen_concurrent = 0
@@ -194,6 +194,7 @@ def test_jobs_status_includes_queue_depth_and_position(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -236,6 +237,7 @@ def test_signed_result_includes_timestamp_and_nonce(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -307,6 +309,7 @@ def test_verify_signature_valid(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -362,6 +365,7 @@ def test_verify_signature_replay_rejected(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -417,6 +421,7 @@ def test_verify_signature_old_timestamp_rejected(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_SIGNATURE_MAX_AGE_SECONDS", "10")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -464,6 +469,7 @@ def test_verify_signature_wrong_sig_rejected(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -529,6 +535,7 @@ def test_metrics_endpoint_includes_async_metrics(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
 
@@ -569,13 +576,13 @@ def test_async_jobs_succeeded_counter_increments(monkeypatch, tmp_path):
     monkeypatch.setenv("IDP_LOG_LEVEL", "WARNING")
 
     from fastapi.testclient import TestClient
+
     from idp import api as api_mod
     from idp.config import Settings
     from idp.metrics import metrics
 
     saved = api_mod._settings
     api_mod._settings = None
-    before = metrics.snapshot()
     try:
         api_mod._settings = Settings.load()
         with TestClient(api_mod.app) as client:

@@ -17,8 +17,6 @@ and ``allow_insecure_http`` kwargs that the public API exposes.
 """
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from idp.llm.backend import (
@@ -241,7 +239,7 @@ def test_china_presets_all_pass_validation(monkeypatch):
     monkeypatch.delenv("IDP_ALLOW_PRIVATE_NETWORK", raising=False)
     from idp.llm.china import CHINA_PROVIDER_PRESETS
 
-    for name, preset in CHINA_PROVIDER_PRESETS.items():
+    for _name, preset in CHINA_PROVIDER_PRESETS.items():
         # Should not raise. (The env vars may not exist; we mock a dummy key.)
         with monkeypatch.context() as m:
             m.setenv(preset["env_var"], "test-key-for-validation")

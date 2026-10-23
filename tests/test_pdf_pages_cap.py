@@ -19,8 +19,6 @@ These tests:
 """
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 
@@ -48,7 +46,6 @@ def _make_pdf(path, num_pages: int) -> str:
     lines.append("endobj")
 
     # Each page: /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
-    body = []
     xref_offsets: list[int] = []
     pos = 0
     out = "\n".join(lines) + "\n"
@@ -94,10 +91,10 @@ def test_count_pdf_pages_returns_correct_count(tmp_path):
 
 def test_count_pdf_pages_returns_none_when_pdfplumber_missing(monkeypatch, tmp_path):
     """If pdfplumber isn't installed, return None (skip the check)."""
-    from idp.parse import parser as parser_module
-
     # Simulate ImportError by patching the import.
     import builtins
+
+    from idp.parse import parser as parser_module
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
