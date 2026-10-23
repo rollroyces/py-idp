@@ -46,6 +46,7 @@ filename heuristic.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,10 +54,14 @@ from typing import Any
 
 from idp.errors import TemplateNotFoundError, TemplateParseError
 
-# yaml is optional: ``templates`` is a feature, not a core dependency.
-# If a user calls load_template() without PyYAML installed, we raise a
-# helpful ImportError pointing to the optional dep instead of crashing
-# at module import time.
+log = logging.getLogger(__name__)
+
+# yaml is imported lazily on first use: ``import idp`` must stay fast and
+# must not require PyYAML for code paths that never touch templates.
+# PyYAML moved into the core dependency set in v0.6.2 because the bundled
+# sample templates now load automatically, but the lazy import is kept so
+# a stripped-down or vendored install still degrades gracefully instead of
+# failing at module import time.
 yaml: Any = None
 
 
@@ -335,7 +340,19 @@ class TemplateRegistry:
 
         bundled = bundled_template_dir()
         if bundled is not None and bundled.is_dir() and any(bundled.glob("*.md")):
-            return cls.load(bundled, watch=watch)
+            try:
+                return cls.load(bundled, watch=watch)
+            except ImportError as e:
+                # PyYAML is a core dependency as of v0.6.2, so this only
+                # trips on a stripped-down or vendored install. Degrade to
+                # an empty registry rather than making server startup
+                # depend on an optional parser.
+                log.warning(
+                    "bundled templates present but unparseable (%s); "
+                    "starting with an empty registry",
+                    e,
+                )
+                return cls({}, watch=watch)
 
         return cls({}, watch=watch)
 

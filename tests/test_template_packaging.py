@@ -20,6 +20,7 @@ installed user got an empty TemplateRegistry.
 """
 from __future__ import annotations
 
+import re
 import tarfile
 import zipfile
 from pathlib import Path
@@ -149,3 +150,59 @@ def test_built_sdist_contains_templates():
     assert stems >= EXPECTED_TEMPLATES, (
         f"{newest.name} is missing {sorted(EXPECTED_TEMPLATES - stems)}"
     )
+
+# ---------------------------------------------------------------------------
+# PyYAML dependency (found by installing the published wheel clean)
+# ---------------------------------------------------------------------------
+def test_pyyaml_is_a_core_dependency():
+    """Bundled templates load by default, so PyYAML must be a core dep.
+
+    Regression: v0.6.1 shipped the templates but left PyYAML optional, so
+    a clean `pip install py-idp==0.6.1` then hitting the bundled fallback
+    raised ImportError: idp.templates requires PyYAML.
+    """
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r"^dependencies = \[(.*?)^\]", text, re.MULTILINE | re.DOTALL)
+    assert m, "could not locate the core dependencies array"
+    assert "pyyaml" in m.group(1).lower(), (
+        "PyYAML is missing from core dependencies; the bundled templates "
+        "load by default and cannot parse without it"
+    )
+
+
+def test_templates_extra_exists():
+    """The error message promises `pip install py-idp[templates]`; honor it.
+
+    Regression: that extra was referenced in idp.templates but never
+    declared in pyproject.toml, so the suggested command would fail.
+    """
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "\ntemplates = [" in text, (
+        "no `templates = [...]` extra declared in pyproject.toml, but "
+        "idp.templates tells users to run `pip install py-idp[templates]`"
+    )
+
+
+def test_load_with_fallback_degrades_when_yaml_unavailable(monkeypatch):
+    """A missing PyYAML must not crash server startup.
+
+    Regression: the fallback path called cls.load(bundled) unguarded, so
+    ImportError propagated and took down app startup. It should warn and
+    fall back to an empty registry.
+    """
+    import idp.templates as tmod
+
+
+    def _boom():
+        raise ImportError("idp.templates requires PyYAML. Install it with: pip install PyYAML")
+
+    monkeypatch.setattr(tmod, "_require_yaml", _boom)
+
+    reg = tmod.TemplateRegistry.load_with_fallback(REPO_ROOT / "nonexistent-dir")
+    assert reg.list_names() == [], "should degrade to an empty registry, not raise"
+
+
+def test_load_with_fallback_still_works_with_yaml(monkeypatch):
+    """The guard above must not break the normal path."""
+    reg = TemplateRegistry.load_with_fallback(None)
+    assert set(reg.list_names()) >= EXPECTED_TEMPLATES

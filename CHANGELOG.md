@@ -5,6 +5,49 @@ All notable changes to py-idp are documented here. Versions follow
 on breaking API changes; the second on backward-compatible features;
 the third on bugfixes.
 
+## [0.6.2] — 2026-10-23 — PyYAML is now a core dependency
+
+Packaging follow-up. No API changes.
+
+### Fixed
+
+* **PyYAML was optional, but v0.6.1 made it mandatory.** Once the bundled
+  templates became the default fallback path (v0.6.1), every default install
+  parses YAML frontmatter on server startup — but PyYAML was never in
+  `[project.dependencies]`. A clean `pip install py-idp==0.6.1` followed by
+  `TemplateRegistry.load_with_fallback(...)` raised:
+
+  ```text
+  ImportError: idp.templates requires PyYAML. Install it with:
+  pip install PyYAML (or pip install py-idp[templates]).
+  ```
+
+  Found by installing the published v0.6.1 wheel into a clean virtualenv and
+  exercising the user-facing path. Local tests, wheel-content assertions, and
+  all five CI Python-version jobs had passed — none of them ran in an
+  environment without PyYAML already present.
+
+  PyYAML is now a core dependency. The import stays lazy so `import idp`
+  remains fast and never hard-fails.
+
+* **The error message pointed at a nonexistent extra.** It recommended
+  `pip install py-idp[templates]`, but no `templates = [...]` entry was ever
+  declared in `pyproject.toml`, so the suggested command could not work.
+  Declared it as a thin alias onto PyYAML so the message and any existing
+  install docs keep working.
+
+* **`load_with_fallback` degrades instead of crashing.** If PyYAML is
+  genuinely unavailable (stripped-down or vendored install), the bundled-parse
+  attempt now warns and returns an empty registry rather than propagating
+  `ImportError` and taking down server startup.
+
+### Added
+
+* Four tests in `tests/test_template_packaging.py`: PyYAML is in core
+  dependencies, the `[templates]` extra is actually declared, the fallback
+  degrades to empty when the yaml import raises, and the guard does not
+  break the normal path.
+
 ## [0.6.1] — 2026-10-23 — ship the bundled document templates
 
 Packaging fix. No API changes.
