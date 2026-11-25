@@ -26,7 +26,30 @@ authors:
   - family-names: "Lam"
     given-names: "Royce"
     alias: "rollroyces"
+    orcid: "https://orcid.org/0009-0008-9113-769X"
+    affiliation: "Independent Researcher (no institutional affiliation; verified email domain umich.edu)"
     email: "roycelam@umich.edu"
+# No `doi:` key yet, deliberately.
+#
+# The key is absent until Zenodo actually archives a release and mints the
+# DOI. A placeholder string under `doi:` would render in GitHub's "Cite this
+# repository" box as a link to a record that does not exist. Same reasoning
+# for `identifiers:` — there is no preprint DOI for this project.
+#
+# To complete it:
+#   1. Enable this repository in the Zenodo GitHub integration
+#      (https://zenodo.org/settings/github) — one toggle per repo.
+#   2. Publish a new GitHub release (e.g. v0.6.3) AFTER this file is
+#      merged to main. Zenodo archives the tag's tree and mints a version
+#      DOI plus a concept DOI.
+#   3. Copy the version DOI into `doi:` above, and the concept DOI into
+#      `identifiers:` below, then open the next release.
+#
+# The ORCID iD above is what makes the DOI bind to your identity: DataCite
+# carries it into the record's nameIdentifiers, and ORCID auto-adds the
+# DOI to your works list. The pattern is already proven on
+# rollroyces/deepcatch (concept DOI 10.5281/zenodo.24453043, version DOI
+# 10.5281/zenodo.24453044).
 preferred-citation:
   type: software
   title: "py-idp: a general-purpose, AI-enabled Intelligent Document Processing framework for Python"
@@ -34,6 +57,7 @@ preferred-citation:
     - family-names: "Lam"
       given-names: "Royce"
       alias: "rollroyces"
+      orcid: "https://orcid.org/0009-0008-9113-769X"
   year: 2026
   url: "https://github.com/rollroyces/py-idp"
   version: 0.6.2
